@@ -11,6 +11,7 @@ import TimelinePane from "@/components/studio/TimelinePane";
 
 // Loaded on the first click of the "So sánh model AI" tab, like the legacy dynamic import.
 const AiModelsTab = lazy(() => import("@/components/models/AiModelsTab"));
+const BatchRenderTab = lazy(() => import("@/components/batch/BatchRenderTab"));
 
 export default function App() {
   const [searchParams] = useSearchParams();
@@ -18,12 +19,14 @@ export default function App() {
   const { data: job } = useJob();
   const actions = useStudioActions();
   const [tab, setTab] = useState("studio");
-  const [modelsOpened, setModelsOpened] = useState(false);
+  // Tab nào đã mở thì giữ nguyên trong cây, chỉ ẩn đi — lô render hàng loạt đang chạy
+  // sẽ chạy tiếp khi người dùng quay về Studio xem kết quả.
+  const [opened, setOpened] = useState(() => new Set(["studio"]));
   const deepLinked = useRef(false);
 
   const openTab = (next) => {
     setTab(next);
-    if (next === "models") setModelsOpened(true);
+    setOpened((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
   };
 
   useEffect(() => {
@@ -38,7 +41,8 @@ export default function App() {
     if (searchParams.get("zoom")) patch.zoom = Number(searchParams.get("zoom"));
     if (Object.keys(patch).length) setUi(patch);
     if (searchParams.get("job")) actions.load(searchParams.get("job"));
-    if (searchParams.get("tab") === "models") openTab("models");
+    const deepTab = searchParams.get("tab");
+    if (deepTab === "models" || deepTab === "batch") openTab(deepTab);
   }, [searchParams, actions]);
 
   return (
@@ -52,9 +56,16 @@ export default function App() {
         <TimelinePane boot={boot} job={job} />
       </main>
       <main className={`models${tab === "models" ? "" : " hidden"}`}>
-        {modelsOpened ? (
+        {opened.has("models") ? (
           <Suspense fallback={null}>
             <AiModelsTab />
+          </Suspense>
+        ) : null}
+      </main>
+      <main className={`batch-main${tab === "batch" ? "" : " hidden"}`}>
+        {opened.has("batch") ? (
+          <Suspense fallback={null}>
+            <BatchRenderTab />
           </Suspense>
         ) : null}
       </main>

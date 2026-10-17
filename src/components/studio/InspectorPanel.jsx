@@ -4,6 +4,7 @@ import { currentPart, currentShot, setUi, useEditorStore } from "@/store/useEdit
 import { useStudioActions } from "@/features/studio/useStudio";
 import { fmtTime, media, money, GEN_LABEL, STATUS_CHIP, STATUS_LABEL } from "@/lib/formatHelpers";
 import { SpeedTab, VoiceTab } from "./InspectorVoiceSpeed";
+import { STEP_VI } from "./FootageTab";
 
 const TABS = [["scene", "Cảnh"], ["voice", "Giọng"], ["speed", "Tốc độ & khung"]];
 const SCOPE_BADGE = { product: "ĐÚNG SKU", shared: "CHUNG VCB", collected: "SƯU TẦM" };
@@ -98,23 +99,55 @@ function CurrentBlock({ job, part, shot }) {
   );
 }
 
-function SceneTab({ job, part, shot }) {
+function SceneTab({ boot, job, part, shot }) {
   const busy = useEditorStore((s) => s.busy);
   const actions = useStudioActions();
   const selClip = shot.selected.kind === "clip" ? shot.selected.clip_id : null;
   const selGen = shot.selected.kind === "gen" ? shot.selected.gen_id : null;
   const candidates = part.candidates || [];
   const gens = part.gen_options || [];
+  const steps = boot?.craft_steps?.length
+    ? boot.craft_steps
+    : Object.entries(STEP_VI).map(([id, label]) => ({ id, label }));
 
   return (
     <>
       <div className="part-head">
         <h3>
           {part.role_label}
-          {part.craft_step ? " · " + part.craft_step.replace(/_/g, " ") : ""}
+          {part.role === "craft"
+            ? " · " + (part.craft_label || STEP_VI[part.craft_step] || part.craft_step || "")
+            : part.huyk_label
+              ? " · " + part.huyk_label
+              : ""}
         </h3>
         <span className={`chip ${STATUS_CHIP[part.status] || ""}`}>{STATUS_LABEL[part.status] || part.status}</span>
       </div>
+      {part.role === "craft" && (
+        <div className="sec" style={{ marginTop: 10 }}>
+          <div className="sec-title">Công đoạn nguồn</div>
+          <div className="chips">
+            <select
+              value={part.craft_step || ""}
+              disabled={!!busy}
+              onChange={(e) => e.target.value && actions.craftStep(part.part_id, e.target.value)}
+            >
+              <option value="">— Chọn công đoạn —</option>
+              {steps.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button className="small-btn" disabled={!!busy} onClick={() => actions.craftStep(part.part_id, "random")}>
+              ↻ Bốc ngẫu nhiên
+            </button>
+          </div>
+          <div className="hint">
+            Chọn đúng một công đoạn để lấy source từ nhóm đó, hoặc bốc ngẫu nhiên một công đoạn khác. Video dựng lại ngay.
+          </div>
+        </div>
+      )}
       <div className="hint">
         {part.part_id.toUpperCase()} · {fmtTime(part.start)} → {fmtTime(part.start + part.duration)} (
         {part.duration.toFixed(1)}s)
@@ -201,12 +234,13 @@ export default function InspectorPanel({ boot, job }) {
           ))}
       </nav>
       <div className="insp-body">
-        {!ready ? (
+        {/* Giọng đọc đặt được cho cả video nên tab này dùng được cả khi chưa dựng. */}
+        {inspTab === "voice" ? (
+          <VoiceTab key={`${part?.part_id || "none"}|${revision}`} boot={boot} job={job} part={ready ? part : null} />
+        ) : !ready ? (
           <p className="muted pad">Chọn một khối trên timeline để chỉnh.</p>
         ) : inspTab === "scene" ? (
-          <SceneTab job={job} part={part} shot={shot} />
-        ) : inspTab === "voice" ? (
-          <VoiceTab key={`${part.part_id}|${revision}`} boot={boot} part={part} />
+          <SceneTab boot={boot} job={job} part={part} shot={shot} />
         ) : (
           <SpeedTab key={`${part.part_id}|${shot.index}|${revision}`} job={job} part={part} shot={shot} />
         )}

@@ -2,6 +2,11 @@
 import { useCurrentUser, useLogout } from "@/features/auth/useAuth";
 import ExportMenu from "./ExportMenu";
 
+/** Giọng HuyK có sẵn chưa — bản ElevenLabs chính thức hoặc bản học từ footage xưởng. */
+const voiceReady = (boot) => !!(boot.eleven_available || boot.huyk_voice_available);
+const voiceName = (boot) =>
+  boot.eleven_available ? "HuyK (ElevenLabs v4)" : boot.huyk_voice_available ? "HuyK (MiniMax)" : "demo";
+
 export default function TopBar({ boot, job, tab, onTab }) {
   const sample = boot && job ? boot.samples.find((x) => x.script === job.script) : null;
   const { data: user } = useCurrentUser();
@@ -21,6 +26,9 @@ export default function TopBar({ boot, job, tab, onTab }) {
         <button className={`tab${tab === "models" ? " active" : ""}`} onClick={() => onTab("models")}>
           So sánh model AI
         </button>
+        <button className={`tab${tab === "batch" ? " active" : ""}`} onClick={() => onTab("batch")}>
+          Render hàng loạt
+        </button>
       </nav>
       <div className="project-title">
         {job ? (
@@ -32,9 +40,9 @@ export default function TopBar({ boot, job, tab, onTab }) {
           "Dự án mới"
         )}
       </div>
-      <div className={boot ? `chip ${boot.eleven_available ? "ok" : "warn"}` : "chip"}>
+      <div className={boot ? `chip ${voiceReady(boot) ? "ok" : "warn"}` : "chip"}>
         {boot
-          ? `${boot.clip_count} clip · giọng: ${boot.eleven_available ? "HuyK (ElevenLabs v4)" : "demo"} · planner: ${boot.claude_available ? "Claude" : "offline"}`
+          ? `${boot.clip_count} clip · giọng: ${voiceName(boot)} · planner: ${boot.claude_available ? "Claude" : "offline"}`
           : "…"}
       </div>
       <ExportMenu job={job} />

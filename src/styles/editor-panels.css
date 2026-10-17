@@ -28,6 +28,18 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .range-row { display: grid; grid-template-columns: 1fr 52px; gap: 8px; align-items: center; } .range-row output { font: 11px var(--mono); text-align: right; }
 .stat { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 4px 0; font-size: 12px; }
 .stat b { font-family: var(--mono); font-weight: 600; }
+.stat.slot { align-items: center; gap: 8px; }
+.stat.slot .slot-src { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; justify-content: flex-end; }
+.stat.slot select { max-width: 190px; font-size: 11px; padding: 2px 4px; }
+.a4-slot { border-bottom: 1px dashed var(--line); padding: 8px 0; }
+.a4-slot-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+.a4-slot-head .slot-src { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; justify-content: flex-end; }
+.a4-slot-head select { max-width: 200px; font-size: 11px; padding: 2px 4px; }
+.a4-kind { font-weight: 600; max-width: 168px; cursor: pointer; background: var(--pane-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 6px; color: var(--ink); }
+.a4-kind:hover { border-color: var(--accent); }
+.a4-clips { display: flex; gap: 6px; overflow-x: auto; margin-top: 6px; padding-bottom: 2px; }
+.a4-clips .card { min-width: 72px; width: 72px; flex: 0 0 auto; }
+.a4-clips .thumb { aspect-ratio: 3 / 4; }
 
 /* footage / alternative cards */
 .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -37,6 +49,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .card .thumb { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: #000; }
 .card .meta { padding: 5px 6px; font-size: 10.5px; color: var(--muted); }
 .card .meta b { color: var(--ink); display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .step-pick { width: 100%; margin-top: 4px; font-size: 10px; padding: 2px 2px; cursor: pointer; }
 .badge { position: absolute; top: 4px; left: 4px; font: 9.5px var(--mono); padding: 1px 5px; border-radius: 3px; background: rgba(0,0,0,.72); }
 .score { height: 3px; background: var(--line-2); border-radius: 2px; margin: 3px 0; } .score i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
 .current { display: grid; grid-template-columns: 110px 1fr; gap: 10px; background: var(--pane-2); border: 1px solid var(--accent); border-radius: 8px; padding: 8px; }
@@ -59,6 +72,14 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .tl-block.shot .tag { position: absolute; left: 3px; bottom: 2px; font: 9.5px var(--mono); background: rgba(0,0,0,.7); padding: 0 4px; border-radius: 3px; }
 .tl-block.shot .fx { position: absolute; right: 3px; top: 2px; font: 9.5px var(--mono); background: rgba(0,0,0,.7); padding: 0 4px; border-radius: 3px; color: var(--accent); }
 .tl-block.active { outline: 2px solid #fff; z-index: 3; }
+/* Xem trước tuyến A4: viền đứt để phân biệt với timeline thật đã dựng */
+.tl-block.preview { cursor: default; border: 1px dashed var(--line-2); background: var(--pane-2); color: var(--muted); }
+.tl-block.part.preview { border-top: 3px solid var(--accent); }
+.tl-block.shot.preview { border-bottom: 4px solid var(--real); display: flex; align-items: center; padding: 0 6px; }
+.tl-block.shot.preview.empty { border-bottom-color: var(--line-2); color: var(--dim); }
+.tl-note { margin: 8px 0 2px 132px; font-size: 11.5px; color: var(--muted); }
+/* Khối phát tiếng sẵn trong clip, để phân biệt với lời máy đọc */
+.tl-block.voice.source { background: var(--pane-3); border: 1px solid var(--t-vo); color: var(--t-vo); }
 .tl-block.sub { background: var(--t-text); } .tl-block.voice { background: var(--t-vo); } .tl-block.music { background: var(--t-music); }
 .tl-block.sfx { background: var(--t-sfx); } .tl-block.logo { background: var(--t-logo); }
 .tl-row.muted .tl-block { opacity: .3; }
@@ -74,3 +95,28 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .tier { font: 10.5px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--muted); }
 .sticky { position: sticky; top: 0; align-self: start; } .big { font: 600 28px var(--mono); color: var(--accent); }
 .models a { color: var(--accent); }
+
+/* Batch render page */
+.batch { padding: 14px; height: calc(100vh - 48px); overflow: auto; max-width: 1040px; }
+/* Cột phải: xem lại từng video trong lô, mỗi video một tab. */
+.batch-main { display: grid; grid-template-columns: minmax(0, 1040px) minmax(320px, 1fr); }
+.batch-preview { height: calc(100vh - 48px); overflow: auto; padding: 14px; border-left: 1px solid var(--line); background: var(--pane); }
+.batch-preview .chips { margin: 8px 0; }
+/* Video dọc 9:16 nên chặn bề ngang, để cột rộng ra cũng không phóng to quá khổ. */
+.batch-player { max-width: 340px; }
+.batch-player video { display: block; width: 100%; max-height: 62vh; border-radius: 10px; background: #000; margin: 4px 0 6px; }
+.batch-preview a.small-btn { text-decoration: none; }
+.batch .panel { background: var(--pane); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.batch .panel h3 { font-size: 14px; margin-bottom: 4px; }
+.batch label { display: grid; gap: 4px; font-size: 11.5px; color: var(--muted); margin: 8px 0; }
+.batch a { color: var(--accent); }
+.pick-list { max-height: 300px; overflow: auto; border: 1px solid var(--line-2); border-radius: 7px; }
+.pick { display: grid; grid-template-columns: auto 86px 1fr auto; gap: 8px; align-items: center; padding: 6px 9px; font-size: 12px; border-bottom: 1px solid var(--line); margin: 0; cursor: pointer; }
+.pick:last-child { border-bottom: 0; } .pick:hover { background: var(--pane-2); } .pick.on { background: var(--accent-soft); }
+.pick b { font-family: var(--mono); } .pick span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick small { color: var(--dim); font-size: 10.5px; }
+.cover { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cover i { font-style: normal; font-size: 11.5px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--pane-2); }
+.cover i.ok { color: var(--real); border-color: var(--real); }
+.cover i.miss { color: var(--missing); border-color: var(--missing); }
+.cover i small { display: block; color: var(--dim); font-size: 10.5px; margin-top: 2px; }

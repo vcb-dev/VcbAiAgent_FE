@@ -1,9 +1,12 @@
 // CapCut-style multi-track timeline: toolbar + track headers with toggles, parts, picture shots,
-// subtitles, VO, music, SFX, logo.
+// subtitles, VO, music, SFX.
 import { useLayoutEffect, useRef, useState } from "react";
 import { setUi, useEditorStore } from "@/store/useEditorStore";
 import { useStudioActions } from "@/features/studio/useStudio";
+import { useA4Plan } from "@/features/nas/useNas";
 import { fmtTime, media, GEN_LABEL } from "@/lib/formatHelpers";
+import { A4_TOTAL, slotLabel, slotSource, slotsTotal, slotsWithStart } from "@/lib/a4Route";
+import { STEP_VI } from "./FootageTab";
 
 const HEAD = 132;
 
@@ -41,14 +44,100 @@ function Playhead({ pxPerSec }) {
   return <div className="tl-playhead" style={{ left: `${HEAD + playhead * pxPerSec}px` }} />;
 }
 
+/** Thước thời gian dùng chung cho timeline thật và bản xem trước. */
+function Ruler({ total, pxPerSec, zoom, onSeek }) {
+  const step = zoom >= 2 ? 1 : 5;
+  const ticks = Array.from({ length: Math.ceil(total / step) + 1 }, (_, i) => i);
+  return (
+    <div
+      className="tl-ruler"
+      style={{ width: `${total * pxPerSec}px` }}
+      onClick={onSeek ? (e) => onSeek((e.clientX - e.currentTarget.getBoundingClientRect().left) / pxPerSec) : undefined}
+    >
+      {ticks.map((i) => (
+        <span key={i} style={{ left: `${i * step * pxPerSec}px` }}>
+          {i * step}s
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Tuyến A4 vẽ sẵn trước khi dựng video.
+ *
+ * Trước đây chỗ này chỉ có một dòng chữ "timeline sẽ hiện sau khi dựng", nên editor không
+ * thấy được bố cục công đoạn cho tới khi dựng xong. Thời lượng ở đây là thời lượng khung
+ * của tuyến; lúc dựng thật mỗi phần sẽ co giãn theo lời đọc.
+ */
+function A4Preview({ zoom, width: clientWidth }) {
+  const category = useEditorStore((s) => s.pickedCategory);
+  const sku = useEditorStore((s) => s.pickedSku);
+  const a4Draft = useEditorStore((s) => s.a4Draft);
+  const plan = useA4Plan(category, sku);
+  const draft = a4Draft?.sku === sku ? a4Draft : plan.data;
+  const slots = slotsWithStart(draft?.slots);
+  const total = slotsTotal(draft?.slots) || A4_TOTAL;
+  const pxPerSec = Math.max(12, Math.floor((clientWidth - HEAD - 20) / total)) * zoom;
+  const width = total * pxPerSec;
+
+  const block = (slot, extra) => ({
+    left: `${slot.start * pxPerSec}px`,
+    width: `${Math.max(slot.seconds * pxPerSec - 2, 3)}px`,
+    ...extra,
+  });
+
+  return (
+    <div className="tl-inner" style={{ width: `${width + HEAD + 20}px` }}>
+      <Ruler total={total} pxPerSec={pxPerSec} zoom={zoom} />
+      <Row name="Phần kịch bản" cls="parts">
+        {slots.map((slot, i) => (
+          <div
+            key={i}
+            className="tl-block part preview"
+            style={block(slot)}
+            title={`${slotLabel(slot, draft, sku)} · ${slot.seconds}s`}
+          >
+            <b>{slotLabel(slot, draft, sku)}</b>
+          </div>
+        ))}
+      </Row>
+      <Row name="Hình chính" cls="main">
+        {slots.map((slot, i) => {
+          const source = slotSource(slot, draft, sku);
+          return (
+            <div
+              key={i}
+              className={`tl-block shot preview${source ? "" : " empty"}`}
+              style={block(slot)}
+              title={source || "chưa có nguồn"}
+            >
+              <small>{source || (sku ? "—" : "chọn sản phẩm")}</small>
+            </div>
+          );
+        })}
+      </Row>
+      <div className="tl-note">
+        {!sku
+          ? "Tuyến A4 · chọn loại và sản phẩm ở tab Kịch bản để thấy nguồn footage từng công đoạn."
+          : plan.isFetching
+            ? `Tuyến A4 · ${sku} · đang bốc cảnh từ kho…`
+            : draft?.craft?.length
+              ? `Tuyến A4 · ${sku} · ${total}s khung mẫu — dựng video để có timeline thật theo lời đọc.`
+              : `Tuyến A4 · ${sku} chưa có source chế tác trên ổ.`}
+      </div>
+    </div>
+  );
+}
+
 function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
   const actions = useStudioActions();
+  const a4Draft = useEditorStore((s) => s.a4Draft);
+  const a4 = a4Draft?.sku === job.sku ? a4Draft : job.nas_plan;
   const cfg = job.settings || {};
   const T = job.timeline.duration;
   const pxPerSec = Math.max(12, Math.floor((clientWidth - HEAD - 20) / Math.max(T, 1))) * zoom;
   const width = T * pxPerSec;
-  const step = zoom >= 2 ? 1 : 5;
-  const ticks = Array.from({ length: Math.ceil(T / step) + 1 }, (_, i) => i);
 
   const blockStyle = (start, dur, extra) => ({
     left: `${start * pxPerSec}px`,
@@ -110,29 +199,30 @@ function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
 
   return (
     <div className="tl-inner" style={{ width: `${width + HEAD + 20}px` }}>
-      <div
-        className="tl-ruler"
-        style={{ width: `${width}px` }}
-        onClick={(e) => setUi({ seekTo: (e.clientX - e.currentTarget.getBoundingClientRect().left) / pxPerSec })}
-      >
-        {ticks.map((i) => (
-          <span key={i} style={{ left: `${i * step * pxPerSec}px` }}>
-            {i * step}s
-          </span>
-        ))}
-      </div>
+      <Ruler total={T} pxPerSec={pxPerSec} zoom={zoom} onSeek={(seekTo) => setUi({ seekTo })} />
       <Row name="Phần kịch bản" cls="parts" busy={busy}>
-        {job.parts.map((p) => (
-          <div
-            key={p.part_id}
-            className={`tl-block part ${p.status}`}
-            style={blockStyle(p.start, p.duration)}
-            onClick={() => pick(p.part_id, 0)}
-          >
-            <b>{p.role_label}</b>
-            {p.craft_step ? " · " + p.craft_step.replace(/_/g, " ") : ""}
-          </div>
-        ))}
+        {job.parts.map((p) => {
+          const craftAt = p.role === "craft" ? job.parts.filter((x) => x.role === "craft").indexOf(p) : -1;
+          const huykAt = p.role === "huyk_talk" ? job.parts.filter((x) => x.role === "huyk_talk").indexOf(p) : -1;
+          const a4Name =
+            craftAt >= 0
+              ? a4?.craft?.[craftAt]?.name
+              : huykAt >= 0
+                ? a4?.huyk?.[huykAt]?.name || p.huyk_label
+                : "";
+          const stepName = p.craft_label || a4Name || STEP_VI[p.craft_step] || p.craft_step || p.huyk_label;
+          return (
+            <div
+              key={p.part_id}
+              className={`tl-block part ${p.status}`}
+              style={blockStyle(p.start, p.duration)}
+              onClick={() => pick(p.part_id, 0)}
+            >
+              <b>{p.role_label}</b>
+              {stepName ? " · " + stepName : ""}
+            </div>
+          );
+        })}
       </Row>
       <Row
         name="Văn bản"
@@ -155,6 +245,12 @@ function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
             🎙 {v.direction ? v.direction : ""} {v.duration.toFixed(1)}s
           </div>
         ))}
+        {/* Outro phát tiếng sẵn trong clip, không phải máy đọc kịch bản. */}
+        {(job.timeline.source_audio || []).map((s, i) => (
+          <div key={`src${i}`} className="tl-block voice source" style={blockStyle(s.start, s.duration)}>
+            🔊 tiếng gốc {s.duration.toFixed(1)}s
+          </div>
+        ))}
       </Row>
       <Row
         name="Nhạc nền"
@@ -171,18 +267,6 @@ function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
         {job.timeline.sfx.map((x, i) => (
           <div key={i} className="tl-block sfx" style={blockStyle(x.start, 1.2)}>
             {x.kind}
-          </div>
-        ))}
-      </Row>
-      <Row
-        name="Logo"
-        toggle={["logo", cfg.logo !== false, ["👁", "🚫"]]}
-        busy={busy}
-        onToggle={() => toggleTrack("logo")}
-      >
-        {job.timeline.logo.map((l, i) => (
-          <div key={i} className="tl-block logo" style={blockStyle(l.start, l.end - l.start)}>
-            ◆ logo HuyK
           </div>
         ))}
       </Row>
@@ -257,8 +341,8 @@ export default function TimelinePane({ boot, job }) {
       <div className="timeline" ref={containerRef}>
         {boot && job ? (
           <TimelineInner boot={boot} job={job} zoom={zoom} sel={sel} busy={busy} width={width} />
-        ) : boot ? (
-          <p className="muted pad">Timeline sẽ hiện sau khi dựng video.</p>
+        ) : boot && width ? (
+          <A4Preview zoom={zoom} width={width} />
         ) : null}
       </div>
     </section>

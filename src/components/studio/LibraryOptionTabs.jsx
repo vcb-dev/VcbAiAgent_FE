@@ -72,7 +72,8 @@ export function AudioTab({ boot, job }) {
         <div className="sec-title">Giọng đọc (VO)</div>
         <div className="opt-grid">
           <Opt boot={boot} job={job} settingKey="voice" value="huyk" title="Giọng HuyK"
-            sub={boot.eleven_available ? "ElevenLabs clone · eleven_v4" : "cần API key"} />
+            sub={boot.eleven_available ? "ElevenLabs clone · eleven_v4"
+              : boot.huyk_voice_available ? "giọng nhân bản · MiniMax" : "chưa học giọng"} />
           <Opt boot={boot} job={job} settingKey="voice" value="demo" title="Giọng demo" sub="macOS “Linh” · offline" />
         </div>
         <p className="hint" style={{ marginTop: "6px" }}>
@@ -144,11 +145,6 @@ export function EffectsTab({ boot, job }) {
           <Opt boot={boot} job={job} settingKey="color" value="warm" title="Trang sức ấm" sub="vàng, đá ấm" />
           <Opt boot={boot} job={job} settingKey="color" value="cool" title="Bạc lạnh" sub="bạc, đá xanh" />
         </div>
-      </div>
-      <div className="sec">
-        <div className="sec-title">Logo thương hiệu</div>
-        <Toggle boot={boot} job={job} settingKey="logo" label="Logo HuyK trên cảnh chế tác"
-          sub="“Source gốc + tag logo HuyK” theo sơ đồ A4" />
       </div>
     </>
   );
