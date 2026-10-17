@@ -12,7 +12,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/features/studio/api";
 import { nas } from "@/features/nas/api";
 import { useBootstrap, useVoices } from "@/features/studio/useStudio";
-import { useCategories, useCraftSteps, useHuykActions, useProducts } from "@/features/nas/useNas";
+import { useCategories, useCraftSteps, useHuykActions, useNasStatus, useProducts } from "@/features/nas/useNas";
 import { media } from "@/lib/formatHelpers";
 
 const CRAFT_SLOTS = 4;      // tuyến A4 cần 4 công đoạn chế tác
@@ -76,6 +76,7 @@ export default function BatchRenderTab() {
   const craftSteps = useCraftSteps(category, sku);
   const product = useMemo(() => (products.data || []).find((p) => p.sku === sku), [products.data, sku]);
   const hasProxy = useMemo(() => (boot?.products || []).some((p) => p.sku === sku), [boot, sku]);
+  const nasOn = useNasStatus().data?.nas?.mounted === true;
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -138,14 +139,15 @@ export default function BatchRenderTab() {
     set({ status: "plan", error: "" });
     const plan = await freshPlan(seen);
     set({ status: "prepare", shoot: plan.shoot, craft: plan.craft.map((s) => s.name) });
-    try {
-      await nas.prepare(category, sku, {
-        craft: plan.craft.map((s) => s.path),
-        huyk: plan.huyk.map((s) => s.path),
-      });
-    } catch (err) {
-      // Mất ổ giữa chừng mà máy đã có proxy thì vẫn dựng được, chỉ là bốc trong kho sẵn có.
-      if (!hasProxy) throw err;
+    if (nasOn) {
+      try {
+        await nas.prepare(category, sku, {
+          craft: plan.craft.map((s) => s.path),
+          huyk: plan.huyk.map((s) => s.path),
+        });
+      } catch (err) {
+        if (!hasProxy) throw err;
+      }
     }
 
     set({ status: "build" });

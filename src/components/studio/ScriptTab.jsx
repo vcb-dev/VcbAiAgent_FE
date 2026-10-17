@@ -10,6 +10,7 @@ import {
   useCategories,
   useCraftSteps,
   useHuykActions,
+  useNasStatus,
   useNasSync,
   usePrepareFootage,
   useProducts,
@@ -138,6 +139,7 @@ export default function ScriptTab({ boot, job }) {
   const hasFootage = (draft?.craft?.length ?? 0) > 0;
   const ready = sku && hasFootage && script.trim().length >= 10;
   const prepare = usePrepareFootage();
+  const nasOn = useNasStatus().data?.nas?.mounted === true;
 
   const changeKind = (index, key) => {
     const kind = SLOT_KINDS.find((k) => kindKey(k) === key);
@@ -235,7 +237,8 @@ export default function ScriptTab({ boot, job }) {
    * thời gian ở lần đầu của mỗi mã.
    */
   const build = async () => {
-    if (!renderable.has(sku)) {
+    // Prod không có ổ NAS: dựng từ catalog + proxy đã có trên máy AI.
+    if (nasOn && !renderable.has(sku)) {
       await prepare.mutateAsync({
         code: category,
         sku,
