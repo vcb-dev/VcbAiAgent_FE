@@ -1,4 +1,4 @@
-/** Vercel Edge: trình duyệt vẫn gọi /api/v1 (same-site), server chuyển sang Railway BE. */
+/** Vercel Edge: trình duyệt gọi /api/v1 (same-site), server chuyển sang Railway BE. */
 export const config = {
   matcher: ["/api/v1/:path*", "/media/:path*"],
 };
@@ -16,6 +16,8 @@ export default async function middleware(request) {
   const target = `${base}${incoming.pathname}${incoming.search}`;
   const headers = new Headers(request.headers);
   headers.delete("host");
+  // Edge fetch tự bung gzip; nếu còn header này thì trình duyệt bung lần nữa và axios fail dù HTTP 200.
+  headers.delete("accept-encoding");
 
   const init = { method: request.method, headers, redirect: "manual" };
   if (!["GET", "HEAD"].includes(request.method)) {
@@ -23,5 +25,9 @@ export default async function middleware(request) {
     init.duplex = "half";
   }
 
-  return fetch(target, init);
+  const up = await fetch(target, init);
+  const out = new Headers(up.headers);
+  out.delete("content-encoding");
+  out.delete("content-length");
+  return new Response(up.body, { status: up.status, statusText: up.statusText, headers: out });
 }
