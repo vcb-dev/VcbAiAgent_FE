@@ -1,12 +1,11 @@
-/** Backend API. Gọi thẳng, không đi qua Vite proxy. */
-const raw = String(import.meta.env.VITE_API_URL || "http://localhost:3011/api/v1")
+/** Backend API — relative để cùng origin với FE (prod proxy / local Vite proxy). */
+const raw = String(import.meta.env.VITE_API_URL || "/api/v1")
   .trim()
   .replace(/\/$/, "");
 
-export const API_BASE: string = raw || "http://localhost:3011/api/v1";
+export const API_BASE: string = raw || "/api/v1";
 
-/** Origin của BE — dùng ghép /media (proxy, thumb, render). */
+/** Origin tuyệt đối nếu VITE_API_URL là URL đầy đủ; để trống thì media dùng cùng host với trang. */
 export const API_ORIGIN: string = /^https?:\/\//i.test(API_BASE) ? new URL(API_BASE).origin : "";
 
-/** Absolute URL for a backend path, e.g. apiUrl("/studio/bootstrap"). */
 export const apiUrl = (path: string): string => `${API_BASE}${path}`;

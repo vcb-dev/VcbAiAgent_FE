@@ -1,4 +1,5 @@
 // Small shared helpers for the studio UI (formatting, media URLs). React escapes text itself.
+import { API_ORIGIN } from "./apiBase";
 
 export const fmtTime = (s) => {
   const v = Math.max(0, Number(s) || 0);
@@ -11,13 +12,12 @@ export const money = (usd) => {
   return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(v < 1 ? 3 : 2)}`;
 };
 
-import { API_ORIGIN } from "./apiBase";
-
 export const media = (path) => {
   if (!path) return "";
   const value = String(path);
   if (/^https?:\/\//i.test(value)) return value;
-  return `${API_ORIGIN}/${value.replace(/^\/+/, "")}`;
+  const prefix = API_ORIGIN ? `${API_ORIGIN}/` : "/";
+  return `${prefix}${value.replace(/^\/+/, "")}`;
 };
 
 export const STATUS_LABEL = { ok: "Đủ footage", gap: "⚠ Thiếu footage", needs_gen: "Dùng AI generate" };
