@@ -25,14 +25,15 @@ export default function PlayerPane({ job }) {
     setUi({ playhead: v.currentTime || 0 });
   };
 
-  // Load a freshly rendered video, keeping the current position.
+  // Load a freshly rendered / remixed video, keeping the current position.
   useEffect(() => {
     const v = videoRef.current;
     if (render?.status === "done" && render.url !== loadedUrlRef.current) {
       loadedUrlRef.current = render.url;
       pendingTimeRef.current = v.currentTime;
       v.poster = media(render.poster || "");
-      v.src = `${media(render.url)}?r=${render.revision}`;
+      v.src = `${media(render.url)}?r=${encodeURIComponent(render.url)}`;
+      v.load();
     }
   }, [render?.status, render?.url, render?.revision]);
 

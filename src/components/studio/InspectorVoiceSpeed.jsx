@@ -1,6 +1,7 @@
-// Inspector tabs "Giọng" (emotion direction + re-voice) and "Tốc độ & khung" (speed / punch-in zoom).
-import { useRef, useState } from "react";
-import { rememberPendingVoice, useEditorStore } from "@/store/useEditorStore";
+// Inspector tabs "Giọng" (emotion + re-voice) and "Nhạc nền" (track + volume).
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { rememberPendingVoice, setUi, useEditorStore } from "@/store/useEditorStore";
 import { useStudioActions } from "@/features/studio/useStudio";
 import { api } from "@/features/studio/api";
 import { media } from "@/lib/formatHelpers";
@@ -8,7 +9,6 @@ import { media } from "@/lib/formatHelpers";
 const EMOTION_VI = { "": "Tự nhiên", "[intrigued]": "Gợi tò mò", "[curious]": "Tò mò, hỏi", "[excited]": "Hào hứng", "[serious]": "Nghiêm túc",
   "[thoughtful]": "Trầm ngâm", "[softly, emotional]": "Nhẹ nhàng, xúc động", "[heartfelt]": "Chân thành, sâu lắng",
   "[warm, grateful]": "Ấm áp, biết ơn", "[admiring]": "Trầm trồ", "[playful]": "Dí dỏm", "[warm, confident]": "Ấm, tự tin (kết)" };
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
 const AUDIO_ACCEPT = "audio/*,video/mp4,video/quicktime";
 
 /** Tên người đọc ứng với mã nhà cung cấp, để giao diện không phải hiện chuỗi kỹ thuật. */
@@ -307,52 +307,115 @@ function PartVoice({ boot, part }) {
   );
 }
 
-export function SpeedTab({ job, part, shot }) {
-  const busy = useEditorStore((s) => s.busy);
+export function MusicTab({ boot, job }) {
+  const pending = useEditorStore((s) => s.pendingMusic);
+  const live = useEditorStore((s) => s.liveMusic);
   const actions = useStudioActions();
-  const sel = shot.selected;
-  const [speed, setSpeed] = useState(sel.speed);
-  const [zoom, setZoom] = useState(sel.zoom || 1);
-  if (sel.kind !== "clip")
-    return <p className="hint">Shot đang dùng đề xuất AI — chọn footage thật ở tab Cảnh để chỉnh tốc độ/khung.</p>;
-  const clip = job.clips[sel.clip_id] || {};
+  const queryClient = useQueryClient();
+  const [q, setQ] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const defaults = boot?.settings_defaults || {};
+  const tracks = boot?.music || [];
+  const trackId = live?.track ?? job?.settings?.music_track ?? pending?.track ?? defaults.music_track ?? "default";
+  const volume = live?.volume ?? job?.settings?.music_volume ?? pending?.volume ?? defaults.music_volume ?? 0.32;
+  const [vol, setVol] = useState(volume);
+  useEffect(() => setVol(volume), [volume]);
+  const locked = uploading;
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? tracks.filter((t) => `${t.name} ${t.id}`.toLowerCase().includes(needle))
+    : tracks;
+
+  const hear = (track, volume) => setUi({ liveMusic: { track, volume } });
+  const pick = (id) => {
+    hear(id, vol);
+    if (job) actions.settings({ music_track: id });
+    else setUi({ pendingMusic: { track: id, volume: vol } });
+  };
+  const committedVol = job?.settings?.music_volume ?? pending?.volume ?? defaults.music_volume ?? 0.32;
+  const commitVolume = () => {
+    if (Math.abs(vol - committedVol) < 0.001) return;
+    if (job) actions.settings({ music_volume: vol });
+    else setUi({ pendingMusic: { track: trackId, volume: vol } });
+  };
+  const addFile = async (file) => {
+    setUploading(true);
+    setError("");
+    try {
+      const track = await api.musicUpload(file);
+      await queryClient.invalidateQueries({ queryKey: ["studio", "bootstrap"] });
+      pick(track.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <>
       <div className="part-head">
-        <h3>Tốc độ &amp; khung · shot {shot.index + 1}</h3>
-        <span className="chip">{shot.duration.toFixed(1)}s</span>
+        <h3>Nhạc nền cả video</h3>
       </div>
-      <div className="hint" style={{ margin: "6px 0" }}>
-        {clip.name} — nguồn {sel.src_in.toFixed(1)}s, khả dụng {(clip.usable || [0, 0]).join("–")}s
+      <p className="hint" style={{ margin: "8px 0 12px" }}>
+        Nhạc chạy đến trước outro rồi fade tắt — outro giữ tiếng gốc, không còn nhạc nền.
+        Tự hạ nhẹ khi có giọng đọc. Thả thanh âm lượng là mix lại tiếng (giữ nguyên hình) — 0% tắt nhạc nền, giọng đọc vẫn còn.
+        {job ? "" : " Chọn trước cũng được — gắn vào lúc dựng."}
+        File tải lên nằm trên volume, không ghi database.
+      </p>
+      <div className="chips" style={{ margin: "0 0 10px" }}>
+        <PickFile label={uploading ? "Đang tải bài…" : "Tải bài từ máy"} disabled={locked} onPick={addFile} />
       </div>
-      <div className="sec-title" style={{ marginTop: "12px" }}>
-        Tốc độ
+      {error ? <p className="hint" style={{ color: "#e66767" }}>{error}</p> : null}
+      <div className="field">
+        Âm lượng
+        <div className="range-row">
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={vol}
+            disabled={locked}
+            onInput={(e) => {
+              const next = Number(e.target.value);
+              setVol(next);
+              hear(trackId, next);
+            }}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setVol(next);
+              hear(trackId, next);
+            }}
+            onPointerUp={commitVolume}
+            onPointerCancel={commitVolume}
+            onKeyUp={commitVolume}
+          />
+          <output>{Math.round(vol * 100)}%</output>
+        </div>
       </div>
-      <div className="chips">
-        {SPEEDS.map((v) => (
-          <button key={v} className={`small-btn ${Math.abs(speed - v) < 0.01 ? "on" : ""}`} onClick={() => setSpeed(v)}>
-            {v}×
+      <input
+        type="search"
+        placeholder="Tìm bài…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        style={{ width: "100%", margin: "10px 0 8px" }}
+      />
+      <div className="opt-list">
+        {shown.map((t) => (
+          <button
+            key={t.id}
+            className={`opt${trackId === t.id ? " on" : ""}`}
+            disabled={locked}
+            onClick={() => pick(t.id)}
+          >
+            <b>{t.name}</b>
+            <small>{t.duration ? `${t.duration}s` : ""}</small>
           </button>
         ))}
       </div>
-      <p className="hint">
-        Cảnh chế tác mặc định 1,25× (như project CapCut thật dùng 1–2×). Nếu clip ngắn, agent tự giảm tốc độ để đủ thời lượng.
-      </p>
-      <div className="sec-title" style={{ marginTop: "14px" }}>
-        Phóng khung (punch-in)
-      </div>
-      <div className="range-row">
-        <input type="range" min="1" max="1.4" step="0.05" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
-        <output>{Number(zoom).toFixed(2)}×</output>
-      </div>
-      <button
-        className="primary"
-        disabled={!!busy}
-        onClick={() => actions.choose(part.part_id, shot.index, { kind: "clip", clip_id: sel.clip_id, speed, zoom: Number(zoom) })}
-      >
-        Áp dụng cho shot này
-      </button>
+      {!shown.length ? <p className="hint">Không có bài khớp.</p> : null}
     </>
   );
 }

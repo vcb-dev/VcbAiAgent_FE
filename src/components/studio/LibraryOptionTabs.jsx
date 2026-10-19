@@ -10,7 +10,7 @@ const useLocked = (job) => {
   return !job || !!busy;
 };
 
-function Opt({ boot, job, settingKey, value, title, sub }) {
+export function Opt({ boot, job, settingKey, value, title, sub }) {
   const actions = useStudioActions();
   const locked = useLocked(job);
   const on = cfg(boot, job)[settingKey] === value ? " on" : "";
@@ -51,7 +51,7 @@ function Toggle({ boot, job, settingKey, label, sub }) {
  * Range bound to a job setting. Commits on the native `change` event (pointer release),
  * like the legacy wiring — React's onChange would fire on every drag step.
  */
-function SettingRange({ settingKey, value, disabled, ...rest }) {
+export function SettingRange({ settingKey, value, disabled, ...rest }) {
   const ref = useRef(null);
   const actions = useStudioActions();
   useEffect(() => {
@@ -64,8 +64,6 @@ function SettingRange({ settingKey, value, disabled, ...rest }) {
 }
 
 export function AudioTab({ boot, job }) {
-  const c = cfg(boot, job);
-  const locked = useLocked(job);
   return (
     <>
       <div className="sec">
@@ -77,27 +75,8 @@ export function AudioTab({ boot, job }) {
           <Opt boot={boot} job={job} settingKey="voice" value="demo" title="Giọng demo" sub="macOS “Linh” · offline" />
         </div>
         <p className="hint" style={{ marginTop: "6px" }}>
-          Cảm xúc từng câu chỉnh ở panel phải → tab <b>Giọng</b>.
+          Cảm xúc từng câu chỉnh ở panel phải → tab <b>Giọng</b>. Nhạc nền chọn ở tab <b>Nhạc nền</b>.
         </p>
-      </div>
-      <div className="sec">
-        <div className="sec-title">Nhạc nền</div>
-        <div className="opt-list">
-          {boot.music.map((t) => (
-            <Opt key={t.id} boot={boot} job={job} settingKey="music_track" value={t.id} title={t.name} sub={`${t.duration}s`} />
-          ))}
-        </div>
-        <p className="hint">
-          Bỏ file nhạc bản quyền vào <code>mvp/data/music/</code> để thêm lựa chọn.
-        </p>
-        <div className="field">
-          Âm lượng nhạc (tự hạ khi có giọng)
-          <div className="range-row">
-            <SettingRange key={c.music_volume} settingKey="music_volume" min="0" max="0.8" step="0.02"
-              value={c.music_volume} disabled={locked} />
-            <output>{Math.round(c.music_volume * 100)}%</output>
-          </div>
-        </div>
       </div>
       <div className="sec">
         <div className="sec-title">Hiệu ứng âm thanh</div>

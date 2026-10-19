@@ -16,31 +16,36 @@ import {
   useProducts,
 } from "@/features/nas/useNas";
 import { money } from "@/lib/formatHelpers";
-import {
-  A4_SLOTS,
-  SLOT_KINDS,
-  changeSlotKind,
-  folderLabel,
-  kindKey,
-  pickOther,
-  replaceSlot,
-  slotSource,
-  withSlotIndex,
-} from "@/lib/a4Route";
-import { applyCraftFormula, FORMULA_LABEL, FORMULA_VALUE, labeledCraft } from "@/lib/craftFormula";
+import { A4_SLOTS, withSlotIndex } from "@/lib/a4Route";
+import { sortCraftByProcess, withFormulaCraft } from "@/lib/craftFormula";
 import { STEP_VI } from "./FootageTab";
+import A4RouteEditor, { toJobPlan } from "./A4RouteEditor";
+
+function voLine(job) {
+  const raw = (job.parts || []).map((p) => p.vo?.provider).find(Boolean) || job.costs?.vo?.provider || "";
+  const name = String(raw).toLowerCase();
+  const usd = job.costs?.vo?.est_cost_usd;
+  if (name.includes("minimax")) return ["Lồng tiếng (MiniMax)", money(usd)];
+  if (name.includes("eleven")) return ["Lồng tiếng (ElevenLabs)", money(usd)];
+  if (name.includes("upload") || name.includes("bản thu")) return ["Lồng tiếng (bản thu)", money(0)];
+  if (name.includes("macos") || name.includes("giọng máy") || name.includes("say")) {
+    return ["Lồng tiếng (giọng máy)", money(0)];
+  }
+  return ["Lồng tiếng", money(usd)];
+}
 
 function summaryRows(job) {
   const t = job.totals;
   const c = job.costs || {};
-  const per = (t.gen_cost_usd || 0) + (c.vo?.est_cost_usd || 0) + (c.script_llm || 0);
+  const llm = job.planner === "rules" ? 0 : c.script_llm || 0;
+  const per = (t.gen_cost_usd || 0) + (c.vo?.est_cost_usd || 0) + llm;
   return [
     ["Thời lượng", `${t.duration.toFixed(1)}s · ${job.parts.length} phần`],
     ["Shot footage thật / AI", `${t.real_shots} / ${t.gen_shots}`],
     ["Template · planner", `${job.template_id} · ${job.planner}`],
     ["AI generate (đề xuất)", money(t.gen_cost_usd)],
-    ["Lồng tiếng (ElevenLabs)", money(c.vo?.est_cost_usd)],
-    ["Lập kế hoạch (LLM)", money(c.script_llm)],
+    voLine(job),
+    ["Lập kế hoạch (LLM)", money(llm)],
     ["Chi phí AI / video", money(per)],
   ];
 }
@@ -112,20 +117,21 @@ export default function ScriptTab({ boot, job }) {
           shoot: job.nas_plan?.shoot || plan.data?.shoot,
           shoots: plan.data?.shoots,
           slots: withSlotIndex(job.nas_plan?.slots || A4_SLOTS),
-          craft,
+          craft: sortCraftByProcess(craft),
           huyk: job.nas_plan?.huyk?.length ? job.nas_plan.huyk : plan.data?.huyk || [],
         },
       });
       return;
     }
     if (plan.data?.sku === sku) {
-      setUi({ a4Draft: { ...plan.data, sku, slots: withSlotIndex(plan.data.slots || A4_SLOTS) } });
+      if (craftPool.isLoading) return;
+      const ordered = withFormulaCraft(plan.data, craftPool.data || []);
+      setUi({ a4Draft: { ...ordered, sku, slots: withSlotIndex(ordered.slots || A4_SLOTS) } });
     }
   }, [sku, job, plan.data, craftPool.data]);
 
   const draft = a4Draft?.sku === sku ? a4Draft : plan.data;
   const writePlan = (next) => setUi({ a4Draft: { ...next, sku } });
-  const slots = withSlotIndex(draft?.slots || A4_SLOTS);
 
   // Ổ có hàng trăm sản phẩm nhưng chỉ mã đã dựng proxy mới render được ngay.
   const renderable = useMemo(() => new Set((boot.products || []).map((p) => p.sku)), [boot.products]);
@@ -141,95 +147,20 @@ export default function ScriptTab({ boot, job }) {
   const prepare = usePrepareFootage();
   const nasOn = useNasStatus().data?.nas?.mounted === true;
 
-  const changeKind = (index, key) => {
-    const kind = SLOT_KINDS.find((k) => kindKey(k) === key);
-    if (!kind || !draft) return;
-    writePlan({ ...draft, slots: changeSlotKind(draft.slots || A4_SLOTS, index, kind) });
+  const liveCraft = (slot, item) => {
+    if (!live) return;
+    const part = job.parts.filter((p) => p.role === "craft")[slot.at];
+    if (part) actions.craftStep(part.part_id, item.step || "random", item.name || "", item.path || "");
   };
 
-  const steps = boot.craft_steps?.length
-    ? boot.craft_steps
-    : Object.entries(STEP_VI).map(([id, label]) => ({ id, label }));
-
-  const pickCraftStep = (slot, stepId) => {
-    if (stepId === FORMULA_VALUE) {
-      applyFormula();
-      return;
-    }
-    if (!draft || !stepId) return;
-    const name = STEP_VI[stepId] || steps.find((s) => s.id === stepId)?.label || stepId;
-    const folder = (craftPool.data || []).find((f) => f.step === stepId);
-    writePlan(
-      replaceSlot(draft, "craft", slot.at, {
-        step: stepId,
-        name,
-        path: folder?.path || stepId,
-      }),
+  const livePlan = (next) => {
+    if (!live) return;
+    const rows = next?.craft || [];
+    actions.craftPlan(
+      rows.map((x) => x?.step || x?.name || "random"),
+      rows.map((x) => x?.name || ""),
+      rows.map((x) => x?.path || ""),
     );
-    if (live) {
-      const part = job.parts.filter((p) => p.role === "craft")[slot.at];
-      if (part) actions.craftStep(part.part_id, stepId, name, folder?.path || "");
-    }
-  };
-
-  const pickHuykAction = (slot, path) => {
-    const item = (huykPool.data || []).find((x) => x.path === path);
-    if (!item || !draft) return;
-    writePlan(replaceSlot(draft, "huyk", slot.at, { path: item.path, name: item.name, orderIndex: item.orderIndex }));
-  };
-
-  /** Áp công thức 4 ô chế tác. Đổi CRAFT_FORMULA trong craftFormula.js khi có công thức chính thức. */
-  const applyFormula = () => {
-    const picked = applyCraftFormula(craftPool.data || []);
-    if (!draft || !picked.some(Boolean)) return;
-    let next = draft;
-    picked.forEach((item, at) => {
-      if (item) next = replaceSlot(next, "craft", at, item);
-    });
-    writePlan(next);
-    if (live) {
-      actions.craftPlan(
-        picked.map((x) => x?.step || x?.name || "random"),
-        picked.map((x) => x?.name || ""),
-        picked.map((x) => x?.path || ""),
-      );
-    }
-  };
-
-  const randomSlot = (slot) => {
-    if (slot.from === "craft") {
-      const step = draft?.craft?.[slot.at]?.step;
-      if (live) {
-        const part = job.parts.filter((p) => p.role === "craft")[slot.at];
-        if (part) {
-          actions.craftStep(
-            part.part_id,
-            step || "random",
-            STEP_VI[step] || "",
-            draft?.craft?.[slot.at]?.path || "",
-          );
-        }
-        return;
-      }
-      if (!step && steps.length) pickCraftStep(slot, steps[Math.floor(Math.random() * steps.length)].id);
-      return;
-    }
-    const pool = huykPool.data || [];
-    const current = draft?.huyk?.[slot.at]?.path;
-    const item = pickOther(pool, new Set((draft?.huyk || []).map((x) => x.path)), current);
-    if (item) pickHuykAction(slot, item.path);
-  };
-
-  const reshuffle = async () => {
-    const fresh = await plan.refetch();
-    if (fresh.data) writePlan(fresh.data);
-    if (live) {
-      const rows = fresh.data?.craft || [];
-      const steps = A4_SLOTS.filter((s) => s.from === "craft").map((_, i) => rows[i]?.step || rows[i]?.name || "random");
-      const labels = A4_SLOTS.filter((s) => s.from === "craft").map((_, i) => rows[i]?.name || "");
-      const paths = A4_SLOTS.filter((s) => s.from === "craft").map((_, i) => rows[i]?.path || "");
-      actions.craftPlan(steps, labels, paths);
-    }
   };
 
   /**
@@ -251,18 +182,7 @@ export default function ScriptTab({ boot, job }) {
       sku,
       template_id: "A4_v1",
       planner: "rules",
-      plan: {
-        category,
-        shoot: draft?.shoot,
-        craft: draft?.craft?.map((s) => ({ path: s.path, name: s.name, step: s.step })),
-        huyk: draft?.huyk?.map((s) => ({ path: s.path, name: s.name })),
-        slots: slots.map((s) => ({
-          from: s.from,
-          variant: s.variant,
-          seconds: s.seconds,
-          at: s.at,
-        })),
-      },
+      plan: toJobPlan(category, draft),
     });
   };
 
@@ -330,124 +250,20 @@ export default function ScriptTab({ boot, job }) {
       {/* Bước 3 ------------------------------------------------------------ */}
       {sku && (
         <div className="sec">
-          <div className="sec-title">
-            <span>3 · Footage theo tuyến A4</span>
-            <span style={{ display: "flex", gap: 6 }}>
-              <button className="small-btn" disabled={!!busy || !hasFootage} onClick={applyFormula}>
-                {FORMULA_LABEL}
-              </button>
-              <button
-                className="small-btn"
-                disabled={plan.isFetching || !!busy}
-                onClick={reshuffle}
-                title="Bốc tổ hợp công đoạn khác"
-              >
-                {plan.isFetching ? "…" : "↻ đổi cảnh"}
-              </button>
-            </span>
-          </div>
-
-          {plan.isLoading && (
-            <div className="hint">
-              {product?.craftSyncedAt
-                ? "Đang bốc cảnh…"
-                : "Mã này chưa được nạp công đoạn nên đang quét ổ, có thể mất vài phút…"}
-            </div>
-          )}
-          {plan.isError && <div className="hint">Không lấy được footage: {plan.error.message}</div>}
-          {draft && !hasFootage && (
-            <div className="hint">Mã {sku} chưa có source chế tác trên ổ.</div>
-          )}
-
-          {hasFootage && (
-            <>
-              <div className="hint" style={{ marginBottom: 6 }}>
-                Đổi loại ô (Sản phẩm / HuyK / Chế tác). Ô chế tác chọn công đoạn — hệ thống tự bốc video trong nhóm đó.
-              </div>
-              {slots.map((s, i) => {
-                const current = s.from === "craft" || s.from === "huyk" ? draft?.[s.from]?.[s.at] : null;
-                return (
-                  <div key={i} className="a4-slot">
-                    <div className="a4-slot-head">
-                      <select
-                        className="a4-kind"
-                        value={kindKey(s)}
-                        disabled={!!busy}
-                        title="Đổi loại ô trên template"
-                        onChange={(e) => changeKind(i, e.target.value)}
-                      >
-                        {SLOT_KINDS.map((k) => (
-                          <option key={kindKey(k)} value={kindKey(k)}>
-                            {k.from === "craft" && s.from === "craft" ? s.role : k.role} · {k.seconds}s
-                          </option>
-                        ))}
-                      </select>
-                      {s.from === "craft" ? (
-                        <span className="slot-src">
-                          <select
-                            value={current?.step || ""}
-                            disabled={!!busy}
-                            onChange={(e) => e.target.value && pickCraftStep(s, e.target.value)}
-                          >
-                            <option value={FORMULA_VALUE}>{FORMULA_LABEL}</option>
-                            {!current?.step && <option value="">— chọn công đoạn —</option>}
-                            {current?.step && !steps.some((st) => st.id === current.step) && (
-                              <option value={current.step}>{current.name || current.step}</option>
-                            )}
-                            {steps.map((st) => {
-                              const n = labeledCraft(boot.library, sku, st.id).length;
-                              return (
-                                <option key={st.id} value={st.id}>
-                                  {st.label}
-                                  {n ? ` · ${n} clip` : ""}
-                                </option>
-                              );
-                            })}
-                          </select>
-                          <button
-                            className="small-btn"
-                            disabled={!!busy}
-                            title="Bốc video ngẫu nhiên trong công đoạn này"
-                            onClick={() => randomSlot(s)}
-                          >
-                            ↻
-                          </button>
-                        </span>
-                      ) : s.from === "huyk" ? (
-                        <span className="slot-src">
-                          <select
-                            value={current?.path || ""}
-                            disabled={!!busy || huykPool.isLoading}
-                            onChange={(e) => e.target.value && pickHuykAction(s, e.target.value)}
-                          >
-                            {!current?.path && <option value="">— chọn cảnh HuyK —</option>}
-                            {current?.path && !(huykPool.data || []).some((x) => x.path === current.path) && (
-                              <option value={current.path}>{folderLabel(current)}</option>
-                            )}
-                            {(huykPool.data || []).map((x) => (
-                              <option key={x.path} value={x.path}>
-                                {folderLabel(x)}
-                              </option>
-                            ))}
-                          </select>
-                          <button className="small-btn" disabled={!!busy} title="Bốc cảnh HuyK khác" onClick={() => randomSlot(s)}>
-                            ↻
-                          </button>
-                        </span>
-                      ) : (
-                        <b>{slotSource(s, draft, product?.name) || "—"}</b>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {draft.shoots > 1 && (
-                <div className="hint" style={{ marginTop: 6 }}>
-                  Lấy từ buổi quay {draft.shoot?.slice(0, 6)} ({draft.shoots} buổi có trên ổ)
-                </div>
-              )}
-            </>
-          )}
+          <A4RouteEditor
+            title="3 · Footage theo tuyến A4"
+            sku={sku}
+            boot={boot}
+            product={product}
+            draft={draft}
+            writePlan={writePlan}
+            plan={plan}
+            craftPool={craftPool}
+            huykPool={huykPool}
+            disabled={!!busy}
+            onCraftPicked={liveCraft}
+            onPlanReplaced={livePlan}
+          />
         </div>
       )}
 

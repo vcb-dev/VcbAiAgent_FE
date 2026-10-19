@@ -17,7 +17,12 @@ export const media = (path) => {
   const value = String(path);
   if (/^https?:\/\//i.test(value)) return value;
   const prefix = API_ORIGIN ? `${API_ORIGIN}/` : "/";
-  return `${prefix}${value.replace(/^\/+/, "")}`;
+  const raw = value.replace(/^\/+/, "");
+  const q = raw.indexOf("?");
+  const pathname = q >= 0 ? raw.slice(0, q) : raw;
+  const query = q >= 0 ? raw.slice(q) : "";
+  const encoded = pathname.split("/").map(encodeURIComponent).join("/");
+  return `${prefix}${encoded}${query}`;
 };
 
 export const STATUS_LABEL = { ok: "Đủ footage", gap: "⚠ Thiếu footage", needs_gen: "Dùng AI generate" };

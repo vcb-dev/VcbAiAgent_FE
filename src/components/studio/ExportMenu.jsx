@@ -1,7 +1,6 @@
 // "Xuất" dropdown: MP4, hand-off package (MP4 + SRT + timeline.json + VO), CapCut project (planned).
 import { useEffect, useState } from "react";
 import { api } from "@/features/studio/api";
-import { media } from "@/lib/formatHelpers";
 
 export default function ExportMenu({ job }) {
   const [open, setOpen] = useState(false);
@@ -30,8 +29,8 @@ export default function ExportMenu({ job }) {
       <div className={`export-menu${open ? "" : " hidden"}`}>
         {ready && (
           <>
-            <a href={media(render.url)} download>
-              ⤓ Video MP4 (bản {render.revision})<small>720×1280 preview · −14 LUFS · dùng ngay khi PASS</small>
+            <a href={api.exportUrl(job.id)}>
+              ⤓ Video MP4 (bản {render.revision})<small>Mix nhạc/âm lượng đang chọn · copy hình, vài giây</small>
             </a>
             <a href={api.packageUrl(job.id)}>
               🗂 Gói dữ liệu cho dev<small>MP4 + phụ đề SRT + timeline.json + VO từng phần</small>

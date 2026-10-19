@@ -34,6 +34,8 @@ export const api = {
   bootstrap: () => call(() => http.get("/studio/bootstrap")),
   /** Giọng nhân bản có trên tài khoản MiniMax, để chọn người đọc cho video. */
   voices: () => call(() => http.get("/studio/voices")),
+  music: () => call(() => http.get("/studio/music")),
+  musicUpload: (file: File) => call(() => http.post("/studio/music-uploads", form(file))),
   createJob: (body: any) => call(() => http.post("/studio/jobs", body)),
   getJob: (id: string) => call(() => http.get(job(id))),
   select: (id: string, body: any) => call(() => http.post(`${job(id)}/select`, body)),
@@ -70,6 +72,8 @@ export const api = {
     call(() => http.post(`${job(id)}/parts/${encodeURIComponent(partId)}/voice-upload/clear`)),
   settings: (id: string, partial: any) => call(() => http.patch(`${job(id)}/settings`, partial)),
   undo: (id: string) => call(() => http.post(`${job(id)}/undo`)),
+  /** MP4 mix nhạc hiện tại (copy hình). */
+  exportUrl: (id: string) => apiUrl(`${job(id)}/export`),
   /** Plain URL: the hand-off package is downloaded by the browser via a link. */
   packageUrl: (id: string) => apiUrl(`${job(id)}/package`),
   aiModels: () => call(() => http.get("/studio/ai-models")),

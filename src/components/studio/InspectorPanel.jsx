@@ -1,12 +1,12 @@
-// Right pane (CapCut "properties"): tabs Cảnh | Giọng | Tốc độ & khung for the selected part/shot.
+// Right pane (CapCut "properties"): tabs Cảnh | Giọng | Nhạc nền for the selected part/shot.
 import { useState } from "react";
 import { currentPart, currentShot, setUi, useEditorStore } from "@/store/useEditorStore";
 import { useStudioActions } from "@/features/studio/useStudio";
 import { fmtTime, media, money, GEN_LABEL, STATUS_CHIP, STATUS_LABEL } from "@/lib/formatHelpers";
-import { SpeedTab, VoiceTab } from "./InspectorVoiceSpeed";
+import { MusicTab, VoiceTab } from "./InspectorVoiceSpeed";
 import { STEP_VI } from "./FootageTab";
 
-const TABS = [["scene", "Cảnh"], ["voice", "Giọng"], ["speed", "Tốc độ & khung"]];
+const TABS = [["scene", "Cảnh"], ["voice", "Giọng"], ["music", "Nhạc nền"]];
 const SCOPE_BADGE = { product: "ĐÚNG SKU", shared: "CHUNG VCB", collected: "SƯU TẦM" };
 
 function ClipCard({ job, cand, selectedId, onPick }) {
@@ -234,15 +234,15 @@ export default function InspectorPanel({ boot, job }) {
           ))}
       </nav>
       <div className="insp-body">
-        {/* Giọng đọc đặt được cho cả video nên tab này dùng được cả khi chưa dựng. */}
+        {/* Giọng / nhạc nền đặt được cho cả video nên dùng được cả khi chưa dựng. */}
         {inspTab === "voice" ? (
           <VoiceTab key={`${part?.part_id || "none"}|${revision}`} boot={boot} job={job} part={ready ? part : null} />
+        ) : inspTab === "music" ? (
+          <MusicTab boot={boot} job={job} />
         ) : !ready ? (
           <p className="muted pad">Chọn một khối trên timeline để chỉnh.</p>
-        ) : inspTab === "scene" ? (
-          <SceneTab boot={boot} job={job} part={part} shot={shot} />
         ) : (
-          <SpeedTab key={`${part.part_id}|${shot.index}|${revision}`} job={job} part={part} shot={shot} />
+          <SceneTab boot={boot} job={job} part={part} shot={shot} />
         )}
       </div>
     </section>

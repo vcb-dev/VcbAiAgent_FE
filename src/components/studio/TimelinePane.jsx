@@ -133,8 +133,11 @@ function A4Preview({ zoom, width: clientWidth }) {
 function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
   const actions = useStudioActions();
   const a4Draft = useEditorStore((s) => s.a4Draft);
+  const liveMusic = useEditorStore((s) => s.liveMusic);
   const a4 = a4Draft?.sku === job.sku ? a4Draft : job.nas_plan;
   const cfg = job.settings || {};
+  const musicVol = liveMusic?.volume ?? cfg.music_volume ?? 0.38;
+  const musicTrack = liveMusic?.track ?? cfg.music_track;
   const T = job.timeline.duration;
   const pxPerSec = Math.max(12, Math.floor((clientWidth - HEAD - 20) / Math.max(T, 1))) * zoom;
   const width = T * pxPerSec;
@@ -151,10 +154,15 @@ function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
       seekTo: job.parts.find((p) => p.part_id === partId).shots[shotIndex]?.start,
     });
 
-  const toggleTrack = (key) =>
-    actions.settings(
-      key === "music" ? { music_volume: (cfg.music_volume ?? 0.32) > 0 ? 0 : 0.32 } : { [key]: cfg[key] === false },
-    );
+  const toggleTrack = (key) => {
+    if (key === "music") {
+      const next = musicVol > 0 ? 0 : 0.38;
+      setUi({ liveMusic: { track: musicTrack || "default", volume: next } });
+      actions.settings({ music_volume: next });
+      return;
+    }
+    actions.settings({ [key]: cfg[key] === false });
+  };
 
   const shotBlock = (shot) => {
     const selected = shot.selected;
@@ -209,7 +217,9 @@ function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
               ? a4?.craft?.[craftAt]?.name
               : huykAt >= 0
                 ? a4?.huyk?.[huykAt]?.name || p.huyk_label
-                : "";
+                : p.role === "product_hero" || p.role === "product_final"
+                  ? job.product_name
+                  : "";
           const stepName = p.craft_label || a4Name || STEP_VI[p.craft_step] || p.craft_step || p.huyk_label;
           return (
             <div
@@ -254,14 +264,20 @@ function TimelineInner({ boot, job, zoom, sel, busy, width: clientWidth }) {
       </Row>
       <Row
         name="Nhạc nền"
-        toggle={["music", (cfg.music_volume ?? 0.32) > 0, ["🔊", "🔇"]]}
+        toggle={["music", musicVol > 0, ["🔊", "🔇"]]}
         busy={busy}
         onToggle={() => toggleTrack("music")}
       >
-        <div className="tl-block music" style={blockStyle(0, T)}>
-          ♪ {boot.music.find((m) => m.id === cfg.music_track)?.name || "nhạc nền"} ·{" "}
-          {Math.round((cfg.music_volume ?? 0.32) * 100)}% · tự hạ khi có giọng
-        </div>
+        {(() => {
+          const musicEnd = job.timeline.music_end ?? T;
+          if (!(musicEnd > 0) || !(musicVol > 0)) return null;
+          return (
+            <div className="tl-block music" style={blockStyle(0, musicEnd)}>
+              ♪ {boot.music.find((m) => m.id === musicTrack)?.name || "nhạc nền"} ·{" "}
+              {Math.round(musicVol * 100)}% · tắt trước outro
+            </div>
+          );
+        })()}
       </Row>
       <Row name="SFX" toggle={["sfx", cfg.sfx !== false, ["🔊", "🔇"]]} busy={busy} onToggle={() => toggleTrack("sfx")}>
         {job.timeline.sfx.map((x, i) => (

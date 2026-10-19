@@ -1,4 +1,4 @@
-// Studio shell: bootstrap, the four panes, top-bar tabs and deep links (?job=&part=&shot=&lib=&insp=&zoom=&tab=).
+// Studio shell: bootstrap, the four panes, sidebar tabs and deep links (?job=&part=&shot=&lib=&insp=&zoom=&tab=).
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useBootstrap, useJob, useStudioActions } from "@/features/studio/useStudio";
@@ -46,29 +46,31 @@ export default function App() {
   }, [searchParams, actions]);
 
   return (
-    <>
-      {error ? <p style={{ color: "#e66767", padding: "12px" }}>Lỗi khởi động: {error.message}</p> : null}
+    <div className="app-shell">
       <TopBar boot={boot} job={job} tab={tab} onTab={openTab} />
-      <main className={`editor${tab === "studio" ? "" : " hidden"}`}>
-        <LibraryPanel boot={boot} job={job} />
-        <PlayerPane job={job} />
-        <InspectorPanel boot={boot} job={job} />
-        <TimelinePane boot={boot} job={job} />
-      </main>
-      <main className={`models${tab === "models" ? "" : " hidden"}`}>
-        {opened.has("models") ? (
-          <Suspense fallback={null}>
-            <AiModelsTab />
-          </Suspense>
-        ) : null}
-      </main>
-      <main className={`batch-main${tab === "batch" ? "" : " hidden"}`}>
-        {opened.has("batch") ? (
-          <Suspense fallback={null}>
-            <BatchRenderTab />
-          </Suspense>
-        ) : null}
-      </main>
-    </>
+      <div className="app-main">
+        {error ? <p style={{ color: "#e66767", padding: "12px" }}>Lỗi khởi động: {error.message}</p> : null}
+        <main className={`editor${tab === "studio" ? "" : " hidden"}`}>
+          <LibraryPanel boot={boot} job={job} />
+          <PlayerPane job={job} />
+          <InspectorPanel boot={boot} job={job} />
+          <TimelinePane boot={boot} job={job} />
+        </main>
+        <main className={`models${tab === "models" ? "" : " hidden"}`}>
+          {opened.has("models") ? (
+            <Suspense fallback={null}>
+              <AiModelsTab />
+            </Suspense>
+          ) : null}
+        </main>
+        <main className={`batch-main${tab === "batch" ? "" : " hidden"}`}>
+          {opened.has("batch") ? (
+            <Suspense fallback={null}>
+              <BatchRenderTab />
+            </Suspense>
+          ) : null}
+        </main>
+      </div>
+    </div>
   );
 }

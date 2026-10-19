@@ -4,7 +4,6 @@
 // thêm bước mới). Mỗi ô là một nhóm bước; hệ thống lấy thư mục có sẵn của mã,
 // ưu tiên bước trong nhóm, không trùng ô khác.
 
-export const FORMULA_VALUE = "__formula__";
 export const FORMULA_LABEL = "Theo thứ tự công đoạn";
 
 /** Thứ tự quy trình kim hoàn (nhỏ → lớn = đầu → cuối). */
@@ -38,7 +37,7 @@ export const CRAFT_FORMULA = [
   ["dinh_da", "lam_sach", "danh_bong", "khac_laser", "hoan_thien"],
 ];
 
-function rank(step) {
+export function rank(step) {
   const i = STEP_ORDER.indexOf(step);
   return i < 0 ? 999 : i;
 }
@@ -46,7 +45,7 @@ function rank(step) {
 function pickForSlot(folders, wanted, usedPaths) {
   const free = folders
     .filter((f) => f?.path && !usedPaths.has(f.path))
-    .sort((a, b) => (a.orderIndex ?? 99) - (b.orderIndex ?? 99) || rank(a.step) - rank(b.step));
+    .sort((a, b) => rank(a.step) - rank(b.step) || (a.orderIndex ?? 99) - (b.orderIndex ?? 99));
   return free.find((f) => wanted.includes(f.step)) || free[0] || null;
 }
 
@@ -58,6 +57,23 @@ export function applyCraftFormula(folders) {
     if (item) used.add(item.path);
     return item;
   });
+}
+
+/** Gắn 4 ô chế tác theo công thức nếu kho có thư mục. */
+export function withFormulaCraft(plan, folders) {
+  const picked = applyCraftFormula(folders || []);
+  if (!picked.some(Boolean)) return plan;
+  const craft = picked
+    .map((item, i) =>
+      item ? { path: item.path, name: item.name, step: item.step } : plan?.craft?.[i],
+    )
+    .filter(Boolean);
+  return { ...plan, craft };
+}
+
+/** Sắp 4 ô chế tác theo thứ tự quy trình (không theo số folder trên ổ). */
+export function sortCraftByProcess(craft) {
+  return [...(craft || [])].sort((a, b) => rank(a?.step) - rank(b?.step));
 }
 
 export function isCraftClip(clip) {

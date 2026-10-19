@@ -29,6 +29,10 @@ export const useEditorStore = create((set) => ({
   a4Draft: null,
   // Bản thu editor chọn ở tab Giọng trước khi có dự án; áp vào ngay sau khi dựng.
   pendingVoice: readPendingVoice(),
+  // Bài nhạc chọn ở tab Nhạc nền trước khi có dự án.
+  pendingMusic: null,
+  // Âm lượng/bài đang kéo trên slider — trình phát nghe ngay, chưa cần dựng lại.
+  liveMusic: null,
   sel: { part: "p1", shot: 0 },
   libTab: "script",
   inspTab: "scene",

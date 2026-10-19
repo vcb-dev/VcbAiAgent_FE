@@ -18,7 +18,7 @@ function adoptJob(queryClient, job) {
   if (!job.parts.some((p) => p.part_id === sel.part)) {
     setUi({ sel: { part: job.parts[0]?.part_id, shot: 0 } });
   }
-  if (jobId !== job.id) setUi({ jobId: job.id });
+  if (jobId !== job.id) setUi({ jobId: job.id, liveMusic: null });
   // Bảng A4 và job phải cùng một dãy công đoạn sau mỗi lần đổi / dựng.
   if (job.sku && job.nas_plan?.craft?.length) {
     const cur = useEditorStore.getState().a4Draft;
@@ -86,10 +86,18 @@ export function useStudioActions() {
       // Mẫu giọng chọn sẵn ở tab Giọng được gửi kèm, để video dựng ra là đã đọc bằng giọng đó.
       build: (body) =>
         run("Đang lập kế hoạch, lồng tiếng, chọn footage", async () => {
-          const voice = useEditorStore.getState().pendingVoice;
+          const { pendingVoice: voice, pendingMusic } = useEditorStore.getState();
           const stored = voice ? { audio: voice.audio, upload_name: voice.upload_name } : null;
           const asSample = !!voice?.clone;      // mẫu giọng đã học được thì để giọng đó đọc kịch bản
-          const job = await api.createJob({ ...body, ...(asSample && stored ? { voice: stored } : {}) });
+          const music = {};
+          if (pendingMusic?.track) music.music_track = pendingMusic.track;
+          if (pendingMusic?.volume != null) music.music_volume = pendingMusic.volume;
+          let job = await api.createJob({
+            ...body,
+            ...(asSample && stored ? { voice: stored } : {}),
+            ...music,
+          });
+          if (pendingMusic) setUi({ pendingMusic: null });
           if (!voice) return job;
           if (asSample) {
             rememberPendingVoice(null);         // đã nằm trong dự án, không cần giữ chờ nữa
@@ -126,8 +134,17 @@ export function useStudioActions() {
         run("Đang học giọng và đọc lại kịch bản", () => api.voiceCloneApply(currentJobId(), stored)),
       clearJobVoiceClone: () =>
         run("Đang bỏ giọng nhân bản, quay lại giọng mặc định", () => api.voiceCloneClear(currentJobId())),
-      settings: (partial) =>
-        run(partial.voice ? "Đang đổi giọng đọc" : "Đang áp dụng tùy chọn", () => api.settings(currentJobId(), partial)),
+      settings: (partial) => {
+        const keys = Object.keys(partial || {});
+        const live = keys.length && keys.every((k) => k === "music_track" || k === "music_volume");
+        return run(
+          live ? "Đang mix nhạc" : partial.voice ? "Đang đổi giọng đọc" : "Đang áp dụng tùy chọn",
+          () => api.settings(currentJobId(), partial).then((job) => {
+            setUi({ liveMusic: null });
+            return job;
+          }),
+        );
+      },
       undo: () => run("Đang hoàn tác", () => api.undo(currentJobId())),
     };
   }, [mutate]);

@@ -1,9 +1,8 @@
 // Tab "Render hàng loạt": một sản phẩm, một kịch bản, nhiều video khác nhau.
 //
-// Luồng: chọn sản phẩm → soát xem ổ có đủ nguồn cho từng công đoạn chưa → nhập nội dung →
-// chọn giọng HuyK → nhập số video. Mỗi video bốc lại kế hoạch A4 (buổi quay, 4 công đoạn, cảnh
-// HuyK) và gửi kèm danh sách clip các video trước đã dùng, nên clip chế tác / HuyK / outro /
-// sản phẩm hoàn thiện của mỗi video là riêng.
+// Luồng: chọn sản phẩm → soát nguồn → chỉnh footage theo tuyến A4 (như Studio) → nội dung →
+// giọng → nhạc → số video. Video đầu dùng đúng tuyến (chế tác theo quy trình); video sau
+// không lấy clip đã dùng. Hết source của một mục thì mục đó quay lại từ đầu.
 //
 // Chạy lần lượt chứ không song song: một lần dựng đã chiếm gần hết CPU cho ffmpeg, chạy chồng
 // nhau chỉ làm mọi video cùng chậm. Video nào lỗi thì ghi lại rồi đi tiếp, không chặn cả lô.
@@ -12,13 +11,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/features/studio/api";
 import { nas } from "@/features/nas/api";
 import { useBootstrap, useVoices } from "@/features/studio/useStudio";
-import { useCategories, useCraftSteps, useHuykActions, useNasStatus, useProducts } from "@/features/nas/useNas";
+import { useA4Plan, useCategories, useCraftSteps, useHuykActions, useNasStatus, useProducts } from "@/features/nas/useNas";
 import { media } from "@/lib/formatHelpers";
+import { A4_SLOTS, withSlotIndex } from "@/lib/a4Route";
+import { withFormulaCraft } from "@/lib/craftFormula";
+import A4RouteEditor, { toJobPlan } from "@/components/studio/A4RouteEditor";
 
 const CRAFT_SLOTS = 4;      // tuyến A4 cần 4 công đoạn chế tác
 const HUYK_SLOTS = 2;       // và 2 cảnh HuyK
 const MAX_VIDEOS = 20;
-const PLAN_TRIES = 8;       // số lần bốc lại khi kế hoạch trùng với video trước
 
 const STATUS_LABEL = {
   queued: "chờ",
@@ -34,7 +35,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const signature = (plan) => [plan.shoot, ...plan.craft.map((s) => s.path), ...plan.huyk.map((s) => s.path)].join("|");
 
 // Vai mà cả lô không được dùng lại clip của nhau; phải khớp với UNIQUE_ROLES bên VCB_AI.
-const UNIQUE_ROLES = new Set(["craft", "huyk_talk", "outro", "product_final"]);
+const UNIQUE_ROLES = new Set(["product_hero", "craft", "huyk_talk", "outro", "product_final"]);
 
 /** Clip của các công đoạn phải khác nhau giữa các video, để video sau né ra. */
 function usedClips(job) {
@@ -66,14 +67,22 @@ export default function BatchRenderTab() {
   const [search, setSearch] = useState("");
   const [script, setScript] = useState("");
   const [voiceId, setVoiceId] = useState("");
+  const [musicId, setMusicId] = useState("");
+  const [musicVol, setMusicVol] = useState(0.38);
+  const [musicQ, setMusicQ] = useState("");
+  const [musicBusy, setMusicBusy] = useState(false);
+  const [musicError, setMusicError] = useState("");
+  const musicFileRef = useRef(null);
   const [count, setCount] = useState(5);
   const [rows, setRows] = useState([]);
   const [preview, setPreview] = useState(0);        // tab video đang xem ở cột phải
   const [running, setRunning] = useState(false);
+  const [batchPlan, setBatchPlan] = useState(null);
   const stopped = useRef(false);
 
   const products = useProducts(category, true);      // chỉ mã đã có footage chế tác trên ổ
   const craftSteps = useCraftSteps(category, sku);
+  const a4Plan = useA4Plan(category, sku);
   const product = useMemo(() => (products.data || []).find((p) => p.sku === sku), [products.data, sku]);
   const hasProxy = useMemo(() => (boot?.products || []).some((p) => p.sku === sku), [boot, sku]);
   const nasOn = useNasStatus().data?.nas?.mounted === true;
@@ -104,46 +113,97 @@ export default function BatchRenderTab() {
   }, [boot, sku]);
 
   const covered = pool.product > 0 || !!product?.folders?.length;
-  // Mỗi video ăn 4 clip chế tác, 2 cảnh HuyK, 1 hoàn thiện và 1 outro riêng — kho nhỏ nhất là trần.
-  // Thư mục chưa kéo thì mỗi thư mục còn cho thêm một clip nữa, nên lấy mức cao hơn trong hai.
-  const maxDistinct = Math.min(
-    Math.floor(Math.max(pool.craft, steps.length) / CRAFT_SLOTS),
-    Math.floor(Math.max(pool.huyk, actions.length) / HUYK_SLOTS),
-    Math.max(pool.productFinal, pool.product, 1),
-    Math.max(pool.outro, 1),
-  );
+  // Chế tác / HuyK: không trùng khi còn source. Hoàn thiện / outro / hero: hết kho thì quay vòng.
+  const distinctCraft = Math.max(1, Math.floor(Math.max(pool.craft, steps.length) / CRAFT_SLOTS));
+  const distinctHuyk = Math.max(1, Math.floor(Math.max(pool.huyk, actions.length) / HUYK_SLOTS));
+  const wrapFinal = Math.max(pool.productFinal, 1);
+  const wrapHero = Math.max(pool.product - pool.productFinal, pool.product, 1);
+  const wrapOutro = Math.max(pool.outro, 1);
+  const maxWithoutWrap = Math.min(distinctCraft, distinctHuyk);
+
+  const tracks = boot?.music || [];
+  const musicDefaults = boot?.settings_defaults || {};
+  const chosenMusic = musicId || musicDefaults.music_track || "default";
+  const shownTracks = useMemo(() => {
+    const q = musicQ.trim().toLowerCase();
+    return q ? tracks.filter((t) => `${t.name} ${t.id}`.toLowerCase().includes(q)) : tracks;
+  }, [tracks, musicQ]);
+
+  useEffect(() => {
+    setBatchPlan(null);
+  }, [sku]);
+
+  useEffect(() => {
+    if (!sku || batchPlan?.sku === sku) return;
+    if (a4Plan.data?.sku !== sku || craftSteps.isLoading) return;
+    const ordered = withFormulaCraft(a4Plan.data, craftSteps.data || []);
+    setBatchPlan({ ...ordered, sku, slots: withSlotIndex(ordered.slots || A4_SLOTS) });
+  }, [sku, a4Plan.data, craftSteps.data, craftSteps.isLoading, batchPlan?.sku]);
+
+  const writePlan = (next) => setBatchPlan({ ...next, sku });
+  const hasA4 = (batchPlan?.craft?.length ?? 0) > 0;
+
+  /** Còn thư mục chưa dùng của đúng công đoạn thì lấy cái đầu; hết thì quay lại từ đầu nhóm đó. */
+  const pickUnused = (items, used, preferStep) => {
+    const scoped = preferStep ? items.filter((x) => x.step === preferStep) : items.filter((x) => x.path);
+    const source = scoped.length ? scoped : items;
+    const free = source.filter((x) => x.path && !used.has(x.path));
+    if (free.length) return free[0];
+    return source[0] || null;
+  };
 
   // Mặc định lấy đúng giọng hệ thống đang dùng cho HuyK.
   useEffect(() => {
     if (!voiceId) setVoiceId(voices.data?.find((v) => v.default)?.voice_id || "");
   }, [voices.data]);     // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ready = !!sku && script.trim().length >= 10 && count >= 1 && !craftSteps.isLoading;
+  useEffect(() => {
+    if (!musicId && musicDefaults.music_track) setMusicId(musicDefaults.music_track);
+    if (musicDefaults.music_volume != null) setMusicVol(musicDefaults.music_volume);
+  }, [musicDefaults.music_track]);     // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Bốc kế hoạch A4 khác với các video đã dựng trong lô; hết cách thì chấp nhận trùng. */
-  const freshPlan = async (seen) => {
-    let plan = null;
-    for (let i = 0; i < PLAN_TRIES; i += 1) {
-      plan = await nas.a4Plan(category, sku);
-      if (!plan?.craft?.length) throw new Error("chưa có source chế tác trên ổ");
-      if (!seen.has(signature(plan))) break;
+  const ready = !!sku && hasA4 && script.trim().length >= 10 && count >= 1 && !craftSteps.isLoading;
+
+  /** Video đầu dùng đúng tuyến editor vừa chỉnh; video sau giữ cùng loại công đoạn, đổi thư mục/clip. */
+  const freshPlan = (index, seen, used) => {
+    const base = batchPlan;
+    if (!base?.craft?.length) throw new Error("chưa chọn footage theo tuyến A4");
+    if (index === 0) {
+      seen.add(signature(base));
+      (base.craft || []).forEach((s) => s.path && used.craft.add(s.path));
+      (base.huyk || []).forEach((s) => s.path && used.huyk.add(s.path));
+      return base;
     }
-    seen.add(signature(plan));
-    return plan;
+    const craft = (base.craft || []).map((wanted) => {
+      const pick = pickUnused(craftSteps.data || [], used.craft, wanted.step) || wanted;
+      if (pick.path) used.craft.add(pick.path);
+      return { path: pick.path, name: pick.name, step: pick.step || wanted.step };
+    });
+    const huyk = (base.huyk || []).map((wanted) => {
+      const pick = pickUnused(huykActions.data || [], used.huyk) || wanted;
+      if (pick.path) used.huyk.add(pick.path);
+      return { path: pick.path, name: pick.name };
+    });
+    const next = { ...base, craft, huyk };
+    if (seen.has(signature(next))) {
+      // Hết thư mục khác thì vẫn dựng, clip exclude_clips lo phần không trùng.
+    }
+    seen.add(signature(next));
+    return next;
   };
 
-  /** Một video: bốc cảnh A4 → kéo footage còn thiếu → dựng → chờ render xong. */
-  const renderOne = async (index, seen, taken) => {
+  /** Một video: kế hoạch A4 đã chỉnh → kéo footage còn thiếu → dựng → chờ render xong. */
+  const renderOne = async (index, seen, usedFolders, taken) => {
     const set = (patch) => setRows((list) => list.map((r, i) => (i === index ? { ...r, ...patch } : r)));
 
     set({ status: "plan", error: "" });
-    const plan = await freshPlan(seen);
-    set({ status: "prepare", shoot: plan.shoot, craft: plan.craft.map((s) => s.name) });
+    const plan = freshPlan(index, seen, usedFolders);
+    set({ status: "prepare", shoot: plan.shoot, craft: (plan.craft || []).map((s) => s.name) });
     if (nasOn) {
       try {
         await nas.prepare(category, sku, {
-          craft: plan.craft.map((s) => s.path),
-          huyk: plan.huyk.map((s) => s.path),
+          craft: (plan.craft || []).map((s) => s.path),
+          huyk: (plan.huyk || []).map((s) => s.path),
         });
       } catch (err) {
         if (!hasProxy) throw err;
@@ -157,14 +217,11 @@ export default function BatchRenderTab() {
       template_id: "A4_v1",
       planner: "rules",
       voice_id: voiceId,
+      music_track: chosenMusic,
+      music_volume: musicVol,
       variant: index + 1,        // mỗi video một số biến thể để không bốc trùng cảnh
       exclude_clips: [...taken],  // clip các video trước đã dùng, video này phải tránh ra
-      plan: {
-        category,
-        shoot: plan.shoot,
-        craft: plan.craft.map((s) => ({ path: s.path, name: s.name, step: s.step })),
-        huyk: plan.huyk.map((s) => ({ path: s.path, name: s.name })),
-      },
+      plan: toJobPlan(category, plan),
     });
     while (job?.render?.status === "rendering") {
       await sleep(900);
@@ -191,13 +248,14 @@ export default function BatchRenderTab() {
     setPreview(0);
     const seen = new Set();
     const taken = new Set();
+    const usedFolders = { craft: new Set(), huyk: new Set() };
     for (let i = 0; i < count; i += 1) {
       if (stopped.current) {
         setRows((list) => list.map((r, idx) => (idx === i ? { status: "skipped" } : r)));
         continue;
       }
       try {
-        await renderOne(i, seen, taken);
+        await renderOne(i, seen, usedFolders, taken);
       } catch (err) {
         setRows((list) => list.map((r, idx) => (idx === i ? { ...r, status: "error", error: err.message } : r)));
       }
@@ -298,20 +356,42 @@ export default function BatchRenderTab() {
                 <Check ok label="Outro" detail={`${pool.outro} clip trong kho chung`} />
               </div>
               <div className="hint" style={{ marginTop: 8 }}>
-                Mỗi video dùng riêng {CRAFT_SLOTS} clip chế tác, {HUYK_SLOTS} cảnh HuyK, 1 sản phẩm hoàn thiện
-                và 1 outro — không trùng với video khác trong lô. Kho hiện tại đủ cho{" "}
-                <b style={{ color: "var(--ink)" }}>{maxDistinct} video</b> khác nhau hoàn toàn
-                ({pool.productFinal || pool.product} clip hoàn thiện đã kéo).
+                Video sau không lấy clip video trước đã dùng. Còn source của đúng công đoạn thì không
+                trùng; hết kho của một mục (ví dụ {wrapFinal} clip hoàn thiện) thì mục đó quay lại từ
+                đầu, các mục còn dư vẫn tách. Chế tác/HuyK đủ khoảng{" "}
+                <b style={{ color: "var(--ink)" }}>{maxWithoutWrap} video</b> không trùng
+                (hero {wrapHero} · hoàn thiện {wrapFinal} · outro {wrapOutro} — hết thì lặp).
                 {hasProxy ? "" : " Mã này chưa có proxy nên video đầu phải chờ kéo footage từ ổ."}
               </div>
             </>
-          )}
+        )}
+      </div>
+      )}
+
+      {sku && (
+        <div className="panel">
+          <A4RouteEditor
+            title="3 · Footage theo tuyến A4"
+            sku={sku}
+            boot={boot}
+            product={product}
+            draft={batchPlan}
+            writePlan={writePlan}
+            plan={a4Plan}
+            craftPool={craftSteps}
+            huykPool={huykActions}
+            disabled={running}
+          />
+          <div className="hint" style={{ marginTop: 8 }}>
+            Cả lô bám tuyến này, chế tác theo thứ tự quy trình. Video sau đổi clip; hết source của
+            một mục thì mục đó dùng lại từ đầu.
+          </div>
         </div>
       )}
 
       {sku && (
         <div className="panel">
-          <h3>3 · Nội dung</h3>
+          <h3>4 · Nội dung</h3>
           <textarea
             rows="6"
             placeholder="Dán nội dung dùng chung cho cả lô video…"
@@ -340,7 +420,7 @@ export default function BatchRenderTab() {
 
       {sku && (
         <div className="panel">
-          <h3>4 · Giọng đọc</h3>
+          <h3>5 · Giọng đọc</h3>
           <label>
             Giọng HuyK nhân bản trên MiniMax
             <select value={voiceId} disabled={running} onChange={(e) => setVoiceId(e.target.value)}>
@@ -365,9 +445,95 @@ export default function BatchRenderTab() {
 
       {sku && (
         <div className="panel">
-          <h3>5 · Số video cần dựng</h3>
+          <h3>6 · Nhạc nền</h3>
+          <p className="hint" style={{ margin: "6px 0 10px" }}>
+            Cả lô dùng chung một bài. Nhạc chạy đến trước outro rồi fade tắt — outro giữ tiếng gốc.
+            Tải mp3/wav/m4a thì bài nằm trên volume (không ghi database), cả studio lẫn hàng loạt đều thấy.
+          </p>
+          <input
+            ref={musicFileRef}
+            type="file"
+            accept="audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              setMusicBusy(true);
+              setMusicError("");
+              try {
+                const track = await api.musicUpload(file);
+                await queryClient.invalidateQueries({ queryKey: ["studio", "bootstrap"] });
+                setMusicId(track.id);
+              } catch (err) {
+                setMusicError(err.message);
+              } finally {
+                setMusicBusy(false);
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="small-btn"
+            disabled={running || musicBusy}
+            onClick={() => musicFileRef.current?.click()}
+          >
+            {musicBusy ? "Đang tải bài…" : "⤒ Tải bài từ máy"}
+          </button>
+          {musicError ? <div className="hint" style={{ color: "#e66767" }}>{musicError}</div> : null}
+          <div className="field">
+            Âm lượng
+            <div className="range-row">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={musicVol}
+                disabled={running}
+                onChange={(e) => setMusicVol(Number(e.target.value))}
+              />
+              <output>{Math.round(musicVol * 100)}%</output>
+            </div>
+          </div>
+          <input
+            type="search"
+            placeholder="Tìm bài…"
+            value={musicQ}
+            disabled={running}
+            onChange={(e) => setMusicQ(e.target.value)}
+            style={{ width: "100%", margin: "8px 0 6px" }}
+          />
+          <div className="opt-list batch-music">
+            {shownTracks.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`opt${chosenMusic === t.id ? " on" : ""}`}
+                disabled={running}
+                onClick={() => setMusicId(t.id)}
+              >
+                <b>{t.name}</b>
+                <small>{t.duration ? `${t.duration}s` : ""}</small>
+              </button>
+            ))}
+          </div>
+          {!shownTracks.length ? (
+            <div className="hint">{tracks.length ? "Không có bài khớp." : "Chưa có nhạc nền trên máy chủ."}</div>
+          ) : (
+            <div className="hint" style={{ marginTop: 6 }}>
+              Đang chọn: <b style={{ color: "var(--ink)" }}>{tracks.find((t) => t.id === chosenMusic)?.name || chosenMusic}</b>
+              {musicVol <= 0 ? " · đã tắt (0%)" : ""}
+            </div>
+          )}
+        </div>
+      )}
+
+      {sku && (
+        <div className="panel">
+          <h3>7 · Số video cần dựng</h3>
           <label style={{ maxWidth: 220 }}>
-            Mỗi video một tổ hợp công đoạn khác nhau
+            Cùng tuyến A4 đã chỉnh, mỗi video một bộ clip khác
             <input
               type="number"
               min="1"
@@ -387,7 +553,11 @@ export default function BatchRenderTab() {
             </button>
           )}
           {!ready && !running && (
-            <div className="hint">Chọn sản phẩm và nhập nội dung (từ 10 ký tự) để bắt đầu.</div>
+            <div className="hint">
+              {!hasA4
+                ? "Chọn sản phẩm và đợi tuyến A4 (hoặc bốc cảnh) rồi nhập nội dung."
+                : "Nhập nội dung (từ 10 ký tự) để bắt đầu."}
+            </div>
           )}
         </div>
       )}
