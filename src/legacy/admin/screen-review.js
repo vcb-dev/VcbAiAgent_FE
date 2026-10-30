@@ -1,6 +1,6 @@
 // Duyệt: Video (hàng chờ · xem · kiểm tra · duyệt/sửa/loại) và Gắn nhãn clip (AI đoán công đoạn, bấm Đúng / Loại).
 // Replaces the old "Hàng duyệt" + "Bàn duyệt G2" screens; #/g2/<job> links land here.
-import { api, esc, media, thumbImg, toast } from "./admin-api.js";
+import { api, appUrl, esc, media, thumbImg, toast } from "./admin-api.js";
 import { money } from "../i18n.js";
 
 const QUEUE = ["waiting_g2", "missing_asset", "rendering", "created"];
@@ -60,7 +60,7 @@ function videoView(jobs, job, rejectReasons) {
   const r = job.render;
   const hd = r.status === "done" && r.quality !== "preview";
   const title = job.content?.title || job.product_name || "Kịch bản tay";
-  const videoSrc = (r.url && media(r.url)) || (job.export?.name && `/api/exports/file?name=${encodeURIComponent(job.export.name)}`) || "";
+  const videoSrc = (r.url && media(r.url)) || (job.export?.name && appUrl(`/api/exports/file?name=${encodeURIComponent(job.export.name)}`)) || "";
   const player = r.status === "done" ? `<video src="${esc(videoSrc)}" poster="${esc(media(r.poster || ""))}" controls playsinline preload="metadata"></video>`
     : `<div class="ph">${r.status === "rendering" ? "Đang dựng…" : r.status === "draft" ? "Bản nháp chưa render" : `Render lỗi<br><span class="small">${esc((r.error || "").slice(-140))}</span>`}</div>`;
   const next = list.find((j) => j.id !== job.id && j.state === "waiting_g2");

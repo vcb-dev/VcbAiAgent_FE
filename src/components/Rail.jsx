@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { LANGS, lang } from "../legacy/i18n.js";
 import { langMenu } from "../legacy/shell.js";
+import { appUrl } from "../lib/appUrl.js";
 
 const ICONS = {
   studio: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/>',
@@ -73,7 +74,7 @@ export default function Rail({ user, onLogout }) {
     <>
       <nav className="rail" id="rail" data-react="1" aria-label="Điều hướng chính">
         <NavLink className="mark" to="/studio" aria-label="VCB Video Agent">
-          <img src="/web/logo-mark.png" alt="" width="22" height="22" />
+          <img src={appUrl("/web/logo-mark.png")} alt="" width="22" height="22" />
         </NavLink>
         {ITEMS.map(([key, tip, to]) => (
           <NavLink key={key} className={({ isActive }) => `ri${isActive ? " on" : ""}`} to={to} data-key={key} data-tip={tip} aria-label={tip}>

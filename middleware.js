@@ -1,13 +1,13 @@
-/** Vercel Edge: trình duyệt gọi /api/v1 (same-site), server chuyển sang Railway BE. */
+/** Vercel Edge: trình duyệt gọi cùng origin → cookie SameSite=Strict. Server chuyển sang Railway BE. */
 export const config = {
-  matcher: ["/api/v1/:path*", "/media/:path*"],
+  matcher: ["/api/:path*", "/media/:path*", "/web/:path*", "/wv/:path*", "/__login"],
 };
 
 export default async function middleware(request) {
   const base = String(process.env.BE_ORIGIN || "").replace(/\/$/, "");
   if (!base) {
     return Response.json(
-      { message: "BE_ORIGIN chưa đặt trên Vercel — dán URL Railway BE (https://….up.railway.app), không kèm /api/v1" },
+      { message: "BE_ORIGIN chưa đặt trên Vercel — URL Railway BE, không kèm /api" },
       { status: 500 },
     );
   }
@@ -16,7 +16,6 @@ export default async function middleware(request) {
   const target = `${base}${incoming.pathname}${incoming.search}`;
   const headers = new Headers(request.headers);
   headers.delete("host");
-  // Edge fetch tự bung gzip; nếu còn header này thì trình duyệt bung lần nữa và axios fail dù HTTP 200.
   headers.delete("accept-encoding");
 
   const init = { method: request.method, headers, redirect: "manual" };

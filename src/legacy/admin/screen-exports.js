@@ -1,6 +1,6 @@
 // Đã xuất: every finished video in the output folder (YYMMDD_<nhóm>_<mã SP>_<tên content>[_EN].mp4) — browse, filter by
 // group / language / day, replay, and send one or many to the Telegram bot.
-import { api, esc, toast } from "./admin-api.js";
+import { api, appUrl, esc, toast } from "./admin-api.js";
 import { money, isVi } from "../i18n.js";
 import * as DR from "./date-range.js";
 
@@ -12,7 +12,7 @@ let shown = 48;
 let selecting = false;
 const chosen = new Set();
 
-const url = (name, kind = "file") => `/api/exports/${kind}?name=${encodeURIComponent(name)}`;
+const url = (name, kind = "file") => appUrl(`/api/exports/${kind}?name=${encodeURIComponent(name)}`);
 const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
 const dayVi = (d) => { const [y, m, dd] = d.split("-"); return `${dd}/${m}/${y}`; };
 const tag = (l) => LANG_TAG[l || "vi"] || (l || "").toUpperCase();

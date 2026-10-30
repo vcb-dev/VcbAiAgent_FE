@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext";
+import { appUrl } from "../lib/appUrl.js";
 
 function nextPath(value) {
   return value && value.startsWith("/") && !value.startsWith("//") ? value : "/studio";
@@ -26,7 +27,6 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/v1/auth/login", {
         method: "POST",
-        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
@@ -45,7 +45,7 @@ export default function LoginPage() {
     <div className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-brand">
-          <img src="/web/logo-mark.png" alt="" width="22" height="22" />
+          <img src={appUrl("/web/logo-mark.png")} alt="" width="22" height="22" />
           VCB Video Agent
         </div>
         <p className="auth-sub">Đăng nhập để vào studio</p>

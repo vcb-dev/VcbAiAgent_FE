@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/((?!api/|media/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|media/|web/|wv/|__login).*)", "destination": "/index.html" }
   ]
 }

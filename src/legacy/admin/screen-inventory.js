@@ -2,7 +2,7 @@
 // so the team plans videos for what is in stock. The top (title, numbers, tabs, filters) stays put while the table
 // scrolls; columns sort; a click on a product opens its card (numbers, posted videos, video plan) in a popup; several
 // products can be ticked at once; "Quy tắc lên kế hoạch" makes videos by itself when the stock matches a rule.
-import { api, esc, toast } from "./admin-api.js";
+import { api, appUrl, esc, toast } from "./admin-api.js";
 import { money as fmtMoney } from "../i18n.js";
 
 const st = { tab: "prio", q: "", group: "", loc: "", op: "", val: "", src: false, sort: { k: "", dir: -1 }, chk: new Set(), shown: 120,
@@ -86,7 +86,7 @@ function popup(r, d, wfs, R, vids) {
   const vlist = vids == null ? '<div class="small muted is-busy" style="padding:8px">Đang tải video đã đăng…</div>'
     : !vids.items.length ? '<div class="small muted" style="padding:8px 4px">Chưa có video đã đăng nào có #mã này trong caption.</div>'
     : vids.items.map((v) => `<a class="ivid" href="#/social/posts/sku/${encodeURIComponent(r.sku)}">
-        <img src="/api/social/thumb?k=${encodeURIComponent(v.key)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
+        <img src="${appUrl(`/api/social/thumb?k=${encodeURIComponent(v.key)}`)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
         <span class="ivid-t"><b>${esc((v.title || "").split("#")[0].trim() || v.title || "(không caption)")}</b>
           <span class="small muted"><span class="ipf" style="background:${pf(v.platform)[1]}">${pf(v.platform)[0]}</span>${esc(v.page || "")} · ${esc((v.created || "").slice(0, 10))}</span></span>
         <span class="ivid-v"><b class="mono">${k(v.views)}</b><span class="small muted">views</span></span><span class="muted" aria-hidden="true">›</span></a>`).join("");

@@ -7,7 +7,7 @@ export function AuthProvider({ children }) {
 
   const refresh = async () => {
     try {
-      const res = await fetch("/api/v1/auth/me", { credentials: "same-origin" });
+      const res = await fetch("/api/v1/auth/me");
       if (res.status === 401) {
         setState({ status: "anonymous", user: null });
         return null;

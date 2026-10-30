@@ -1,5 +1,6 @@
 // Shared app shell for the Studio (/) and the admin (/admin): icon rail, light/dark theme, nav badges.
 import { LANGS, initI18n, lang, setLang } from "./i18n.js";
+import { appUrl } from "../lib/appUrl.js";
 
 const KEY = "vcb-theme";
 let i18nStarted = false;
@@ -44,7 +45,7 @@ export function mountRail(active) {
   const onAdmin = location.pathname.startsWith("/admin");
   const href = (h) => (onAdmin && h.startsWith("/admin#") ? h.slice(6) : h);
   const item = ([key, tip, h]) => `<a class="ri${key === active ? " on" : ""}" href="${href(h)}" data-key="${key}" data-tip="${tip}" aria-label="${tip}"${key === active ? ' aria-current="page"' : ""}>${svg(key)}${key === "review" ? '<span class="nb" id="nb-review"></span>' : key === "content" ? '<span class="nb" id="nb-content"></span>' : ""}</a>`;
-  el.innerHTML = `<a class="mark" href="/" aria-label="VCB Video Agent"><img src="/web/logo-mark.png" alt="" width="22" height="22"></a>${ITEMS.map(item).join("")}<div class="grow"></div>
+  el.innerHTML = `<a class="mark" href="/" aria-label="VCB Video Agent"><img src="${appUrl("/web/logo-mark.png")}" alt="" width="22" height="22"></a>${ITEMS.map(item).join("")}<div class="grow"></div>
     ${item(["ai", "AI · hệ thống", "/admin#/ai"])}
     <button class="ri" id="theme-btn" type="button" data-tip="Sáng / tối" aria-label="Đổi giao diện sáng tối">${svg(theme() === "dark" ? "sun" : "moon")}</button>
     <button class="ri lang-btn" id="lang-btn" type="button" data-tip="Ngôn ngữ hệ thống" aria-label="Ngôn ngữ hệ thống" aria-haspopup="menu" data-noi18n>${(LANGS.find((x) => x[0] === lang()) || LANGS[0])[2]}</button>`;

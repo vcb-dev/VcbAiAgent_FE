@@ -1,5 +1,5 @@
 // Đăng & hiệu quả: Video đã đăng · Lịch đăng theo page · Hiệu quả (AI phân tích từng video, PAAST, dựng, bài học) · Kết nối.
-import { api, esc, toast } from "./admin-api.js";
+import { api, appUrl, esc, toast } from "./admin-api.js";
 import { moneyShort } from "../i18n.js";
 import * as DR from "./date-range.js";
 import { downloadXlsx, printReport, hbars, daily, shares, K as KR, fmtN } from "./report-tools.js";
@@ -225,7 +225,7 @@ function postEditor(mine) {
   const m = mine.find((x) => x.id === st.editPost);
   if (!m) return "";
   const editable = ["scheduled", "pending", "error"].includes(m.status);
-  return `<div class="pedit"><img src="/api/exports/thumb?name=${encodeURIComponent(m.export)}" alt="" onerror="this.style.visibility='hidden'">
+  return `<div class="pedit"><img src="${appUrl(`/api/exports/thumb?name=${encodeURIComponent(m.export)}`)}" alt="" onerror="this.style.visibility='hidden'">
     <div class="chn"><b>${esc(m.meta?.title || m.export)}</b><span class="small muted">${esc(m.meta?.family || "")} · ${esc((m.meta?.lang || "vi").toUpperCase())} · ${STATUS[m.status] || m.status}${m.error ? ` · <span style="color:var(--bad)">${esc(m.error)}</span>` : ""}</span>
       ${editable ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
         <label class="small muted" style="display:flex;gap:6px;align-items:center">Giờ đăng <input class="in mono" type="datetime-local" id="pe-when" value="${esc(m.scheduled_at.replace(" ", "T"))}" style="width:auto;min-height:32px"></label>
@@ -255,7 +255,7 @@ function exportsPicker(cur, d, ex) {
   const cards = items.slice(0, st.exShown || 48).map((x) => {
     const u = used[x.name] || new Set(), here = u.has(cur.cid), others = [...u].filter((c) => c !== cur.cid).length;
     return `<label class="vcard pick${here ? " done" : ""}">
-      <span class="vth"><img src="/api/exports/thumb?name=${encodeURIComponent(x.name)}" alt="" loading="lazy" onerror="this.remove()">
+      <span class="vth"><img src="${appUrl(`/api/exports/thumb?name=${encodeURIComponent(x.name)}`)}" alt="" loading="lazy" onerror="this.remove()">
         <span class="vb tl" style="background:rgba(0,0,0,.6);color:#fff">${esc(x.family || "—")}</span><span class="vb tr mono" style="background:rgba(0,0,0,.6);color:#fff;padding:3px 7px">${esc(LANGS[x.lang || "vi"] || (x.lang || "").toUpperCase())}</span>
         <input type="checkbox" class="chk pickbox" data-expick="${esc(x.name)}" ${here ? "disabled" : ""} aria-label="Chọn ${esc(x.title)}">
         <span class="vb bl mono">${dmy(x.made)}</span>
@@ -577,7 +577,7 @@ function connectView(lib, d, msg) {
   const card = (code, title, status, ok, detail, warn, btn) => `<div class="pcard"><div style="display:flex;gap:10px;align-items:center">${pf(code, true)}
       <span class="chn"><b>${title}</b><span class="small" style="color:${ok ? "var(--ok)" : "var(--muted)"}">${status}</span></span></div>
       <span class="small muted" style="min-height:34px;line-height:1.45">${detail}</span>${warn ? `<span class="warnbox small">${warn}</span>` : ""}${btn}</div>`;
-  const link = (href, l, pri) => `<a class="btn${pri ? " pri" : ""}" href="${href}">${l}</a>`;
+  const link = (href, l, pri) => `<a class="btn${pri ? " pri" : ""}" href="${appUrl(href)}">${l}</a>`;
   const stats = lib.stats || {};
   const mkSel = (id, cur, auto) => `<span class="mkw"><select class="in" data-mk="${esc(id)}" aria-label="Thị trường" style="min-height:30px">${Object.entries(lib.markets).map(([m, l]) => `<option value="${m}" ${cur === m ? "selected" : ""}>${m.toUpperCase()} · ${esc(l)}</option>`).join("")}</select>${auto ? '<span class="small muted auto-h" title="Tự đoán theo tên page — chọn lại để cố định">tự đoán</span>' : ""}</span>`;
   const tmSel = (id, cur) => `<select class="in" data-tm="${esc(id)}" aria-label="Team" style="min-height:30px"><option value="">Chưa gán</option>${lib.teams.map((t) => `<option ${cur === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`;

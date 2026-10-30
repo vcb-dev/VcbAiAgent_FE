@@ -1,7 +1,7 @@
 // Thin fetch wrapper for the MVP FastAPI backend.
 
 async function call(path, options = {}) {
-  const res = await fetch(path, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...options });
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
   if (res.status === 401 && !location.hash.startsWith("#/login")) {
     const next = encodeURIComponent(location.hash.replace(/^#/, "") || "/studio");
     location.hash = `#/login?next=${next}`;

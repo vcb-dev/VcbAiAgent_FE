@@ -30,7 +30,7 @@ function Shell() {
   return (
     <div className={studio ? "studio-app" : "app"}>
       <Rail user={auth.user} onLogout={async () => {
-        await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
+        await fetch("/api/v1/auth/logout", { method: "POST" });
         auth.clear();
       }} />
       {seenStudio ? <StudioPage hidden={!studio} /> : null}

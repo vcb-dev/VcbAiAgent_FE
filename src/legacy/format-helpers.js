@@ -1,4 +1,7 @@
 // Small shared helpers for the MVP UI (escaping, formatting, media URLs).
+import { appUrl } from "../lib/appUrl.js";
+
+export { appUrl };
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -13,7 +16,11 @@ export const money = (usd) => {
   return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(v < 1 ? 3 : 2)}`;
 };
 
-export const media = (path) => (path ? `/${String(path).replace(/^\/+/, "")}` : "");
+export const media = (path) => {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path) || path.startsWith("blob:") || path.startsWith("data:")) return path;
+  return appUrl(`/${String(path).replace(/^\/+/, "")}`);
+};
 
 export const STATUS_LABEL = { ok: "Đủ footage", gap: "⚠ Thiếu footage", needs_gen: "Dùng AI generate" };
 export const STATUS_CHIP = { ok: "ok", gap: "bad", needs_gen: "ai" };

@@ -1,5 +1,5 @@
 // FX: Template dựng · Nhạc nền (nghe thử) · Chữ & hiệu ứng (phụ đề, chuyển cảnh, màu, mặc định, quy tắc).
-import { api, esc, toast } from "./admin-api.js";
+import { api, appUrl, esc, toast } from "./admin-api.js";
 
 const ROLE_VI = { hook: "Hook", product_hero: "Sản phẩm", product_final: "Hoàn thiện", huyk_talk: "HuyK nói", craft: "Chế tác",
   content_illustration: "Minh họa", outro: "Outro", huyk_silent: "HuyK im", hook_visual: "Hook hình", stock: "Stock" };
@@ -92,7 +92,7 @@ function musicView(b) {
   const d = b.settings_defaults;
   return `<div class="page"><section class="box" style="overflow:hidden">${b.music.map((m) => `<div class="trk">
       <span style="width:240px;font-weight:500">${esc(m.name)}</span>
-      <audio controls preload="none" src="/api/music/${encodeURIComponent(m.id)}/audio"></audio>
+      <audio controls preload="none" src="${appUrl(`/api/music/${encodeURIComponent(m.id)}/audio`)}"></audio>
       <span class="mono small muted" style="width:52px;text-align:right">${Math.floor(m.duration / 60)}:${String(Math.round(m.duration % 60)).padStart(2, "0")}</span>
       ${m.id === d.music_track ? '<span class="chip ok">mặc định</span>' : '<span style="width:70px"></span>'}</div>`).join("") || '<div class="empty">Chưa có nhạc. Bỏ file vào SOURCE\\Nhac nen.</div>'}</section>
     <p class="muted small" style="margin:0">Nhạc lấy từ SOURCE\\Nhac nen. Nhạc tự hạ khi có giọng đọc.</p></div>`;

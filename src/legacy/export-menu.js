@@ -5,7 +5,7 @@
 // "Lưu làm template dựng" keeps the cut structure + settings of this video for the Script tab.
 import { api } from "./api-client.js";
 import { applyJob, store } from "./editor-store.js";
-import { esc } from "./format-helpers.js";
+import { appUrl, esc } from "./format-helpers.js";
 
 const $ = (id) => document.getElementById(id);
 const PFC = { facebook: ["FB", "#1877F2"], instagram: ["IG", "#C13584"], tiktok: ["TT", "#E11D48"] };
@@ -59,8 +59,8 @@ function follow() {
         const ex = (sh.steps || []).find((s) => s.k === "export");
         if (!X.downloaded) {
           X.downloaded = true;
-          if (X.dl && ex?.text) download(`/api/exports/file?name=${encodeURIComponent(ex.text)}`, ex.text);
-          if (X.pkg) setTimeout(() => download(api.packageUrl(id)), 600);
+          if (X.dl && ex?.text) download(appUrl(`/api/exports/file?name=${encodeURIComponent(ex.text)}`), ex.text);
+          if (X.pkg) setTimeout(() => download(appUrl(api.packageUrl(id))), 600);
         }
       } else if (sh.state === "error" || st.status === "error") {
         X.phase = "error";
