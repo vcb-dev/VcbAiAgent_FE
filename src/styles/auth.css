@@ -1,13 +1,12 @@
-/* Trang đăng nhập — dùng lại token của editor-layout.css, không sửa file CSS của Studio. */
 .auth-screen {
   height: 100vh;
   display: grid;
   place-items: center;
-  background: radial-gradient(circle at 50% 0%, #17171a 0%, var(--bg) 60%);
+  background: var(--bg);
 }
 
 .auth-card {
-  width: 340px;
+  width: min(340px, calc(100vw - 32px));
   padding: 28px;
   background: var(--pane);
   border: 1px solid var(--line);
@@ -33,7 +32,6 @@
   margin-bottom: 13px;
 }
 
-/* editor-layout.css chỉ style input[type=text|number] nên password phải tự khai báo. */
 .auth-field input {
   width: 100%;
   background: var(--pane-2);
@@ -70,7 +68,7 @@
   border: 0;
   border-radius: 7px;
   font-weight: 600;
-  color: #071315;
+  color: var(--accent-ink);
   background: var(--accent);
   cursor: pointer;
 }
@@ -80,38 +78,10 @@
   cursor: progress;
 }
 
-/* Nút tài khoản trên top bar: mượn dáng .chip để không phá nhịp của thanh công cụ. */
-.auth-chip {
-  background: transparent;
-  cursor: pointer;
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.auth-chip:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-
-.auth-chip:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .auth-splash {
   height: 100vh;
   display: grid;
   place-items: center;
   color: var(--muted);
   background: var(--bg);
-}
-
-.auth-splash button {
-  margin-top: 12px;
-  padding: 7px 14px;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--pane-2);
-  cursor: pointer;
 }
