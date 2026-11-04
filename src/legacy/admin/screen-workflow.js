@@ -72,6 +72,24 @@ const nodeOf = (id) => (S.cat?.nodes || NODES)[id] || NODES[id];
 const paletteOf = () => S.cat?.palette || PALETTE;
 const famOf = (w) => (w.content?.families && w.content.families[0]) || "A4";
 const posting = (w) => !!(w.publish && w.publish.on);
+function tgGroups(D) {
+  const gs = D?.telegram_groups || [];
+  return gs.length ? gs : [{ id: "vn", label: "VN", lang: "vi", set: false }, { id: "tbn", label: "TBN", lang: "es", set: false }];
+}
+function defaultTgGroup(w, D) {
+  const lang = (w.lang || "vi").toLowerCase();
+  const prefer = lang === "es" ? "tbn" : "vn";
+  const gs = tgGroups(D);
+  if (gs.some((g) => g.id === prefer)) return prefer;
+  return gs[0]?.id || prefer;
+}
+function tgGroupOf(w) {
+  return (w.editor?.telegram_group || "").trim().toLowerCase();
+}
+function enableTelegram(w, D) {
+  w.editor = { ...(w.editor || {}), on: true, telegram: true,
+    telegram_group: tgGroupOf(w) || defaultTgGroup(w, D) };
+}
 const on = (w, id) => {
   if (id === "footage") return famOf(w) === "A4";
   if (id === "review") return !w.build?.auto_render;
@@ -302,7 +320,9 @@ function applyPicksToWorkflow(w, ids) {
   else { if (famOf(w) === "A4") w.content.families = ["A1"]; w.a4_line = false; }
   w.build = { ...(w.build || {}), auto_render: !set.has("review") };
   w.check = { ...(w.check || {}), on: set.has("check") };
+  const keepGroup = (w.editor || {}).telegram_group;
   w.editor = { ...(w.editor || {}), on: telegram, telegram };
+  if (telegram) w.editor.telegram_group = keepGroup || defaultTgGroup(w);
   w.publish = { ...(w.publish || {}), on: publish };
   w.learn = { ...(w.learn || {}), on: set.has("learn") };
   w.stats = { ...(w.stats || {}), on: set.has("stats") };
@@ -380,7 +400,11 @@ function status(w, id) {
   if (id === "review") return v("Cột Nháp trên Job · tự động", "wait");
   if (id === "g2") return v("Vào mục Duyệt · không đăng, không Telegram", "ok");
   if (id === "check") return v(`Điểm dự đoán ≥ ${w.check.threshold}`, "ok");
-  if (id === "editor") return v(w.editor?.telegram ? "Gửi vào nhóm Telegram khi HD xong" : "Không gửi Telegram", w.editor?.telegram ? "ok" : "wait");
+  if (id === "editor") {
+    const g = tgGroups().find((x) => x.id === tgGroupOf(w));
+    if (!w.editor?.telegram) return v("Không gửi Telegram", "wait");
+    return g ? v(`Gửi nhóm ${g.label} khi HD xong`) : v("Chưa chọn nhóm Telegram", "warn");
+  }
   if (id === "publish") return v(`${st.scheduled || 0} chờ giờ đăng`, "ok");
   if (id === "post") return v(`${st.published || 0} đã đăng${st.error ? ` · ${st.error} lỗi` : ""}`, st.error ? "warn" : "ok");
   if (id === "stats") return v("Mỗi 6 giờ", "wait");
@@ -402,7 +426,10 @@ function sub(w, id, D) {
   if (id === "review") return "Người duyệt tích job rồi bấm Duyệt & render";
   if (id === "g2") return "Chờ người xem ở Duyệt. Không đăng MXH, không gửi Telegram.";
   if (id === "check") return "Đúng: lên lịch · Sai: chờ Editor";
-  if (id === "editor") return w.editor?.telegram ? "Gửi video vào nhóm Telegram" : "Chờ duyệt trong Lịch đăng";
+  if (id === "editor") {
+    const g = (D.telegram_groups || []).find((x) => x.id === tgGroupOf(w));
+    return w.editor?.telegram ? (g ? `Nhóm ${g.label}` : "Chọn nhóm nhận") : "Không gửi Telegram";
+  }
   if (id === "publish") return w.publish.target === "market" ? "Mọi kênh cùng ngôn ngữ video" : `${(w.publish.channels || []).length} kênh đã chọn`;
   if (id === "post") return "FB Reels · Instagram · TikTok hộp thư";
   if (id === "stats") return `Content win ≥ ${(D.win || 100000).toLocaleString(globalThis.VCB_LOC || "vi-VN")} view`;
@@ -428,7 +455,7 @@ function canvas(w, D) {
     const c = pos.check, e = pos.editor, p = pos.publish;
     edges.push(`<path d="M${c.x + W / 2} ${c.y + 118} C${c.x + W / 2} ${c.y + 200}, ${e.x + W / 2} ${e.y - 60}, ${e.x + W / 2} ${e.y}" class="wf-e warn"></path>`);
     if (p) {
-      edges.push(`<path d="M${e.x + W} ${e.y + PY} C${e.x + W + 80} ${e.y + PY}, ${p.x + W / 2} ${p.y + 200}, ${p.x + W / 2} ${p.y + 118}" class="wf-e warn"></path>`);
+    edges.push(`<path d="M${e.x + W} ${e.y + PY} C${e.x + W + 80} ${e.y + PY}, ${p.x + W / 2} ${p.y + 200}, ${p.x + W / 2} ${p.y + 118}" class="wf-e warn"></path>`);
     }
     labels.push(`<span class="wf-l ok" style="left:${c.x + W + 6}px;top:${c.y + 20}px">Đúng</span>`, `<span class="wf-l warn" style="left:${c.x + W / 2 + 8}px;top:${c.y + 150}px">Sai</span>`);
   }
@@ -498,11 +525,13 @@ function inspector(w, D) {
     "Điểm dự đoán = điểm trung bình các video cùng tuyến trên kênh (cần ≥ 3 video có số liệu, chưa đủ thì tính là Sai)")
     + f("Đúng", '<span class="small">Lên lịch đăng ngay theo giờ từng kênh</span>') + f("Sai", `<span class="small">${on(w, "editor") ? "Chờ Editor duyệt" : "Vẫn lên lịch (khối Editor duyệt đang tắt)"}</span>`);
   if (id === "editor") {
-    const gs = D.telegram_groups || [];
-    const cur = w.editor?.telegram_group || "";
-    body = f("Telegram", `<label class="small"><input type="checkbox" class="chk" data-b="editor.telegram" ${w.editor?.telegram ? "checked" : ""}> Gửi video vào nhóm khi HD xong</label>`, "Không đăng MXH. File > 50 MB Telegram từ chối.")
-      + f("Nhóm nhận", `<select class="in" data-k="editor.telegram_group">${[["", "Theo ngôn ngữ xuất (VI → VN, ES → TBN)"], ...gs.map((g) => [g.id, `${g.label}${g.set ? "" : " · chưa có ID"}`])].map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`,
-        "Workflow tiếng Việt chọn VN, TBN chọn nhóm Tây Ban Nha. Thêm ID ở Cài đặt › Khoá kết nối.");
+    const gs = tgGroups(D);
+    const cur = tgGroupOf(w);
+    const g = gs.find((x) => x.id === cur);
+    body = f("Gửi vào nhóm nào", oneChip(gs.map((x) => [x.id, x.label]), cur, "data-tggroup"),
+      g ? (g.set ? `Video HD xong gửi vào nhóm ${g.label}.` : `Đã chọn ${g.label} — chưa có chat ID, dán ID ở Cài đặt › Khoá kết nối.`) : "Bấm một nhóm. Workflow tiếng Việt → VN, TBN → nhóm Tây Ban Nha.")
+      + (gs.some((x) => x.set) ? "" : f("Chat ID", '<span class="small">Chưa lưu ID nhóm. Vào <a href="#/ai">Cài đặt › Khoá kết nối</a>, dán chat ID VN / TBN rồi quay lại chọn.</span>'))
+      + f("Gửi khi HD xong", `<label class="small"><input type="checkbox" class="chk" data-b="editor.telegram" ${w.editor?.telegram !== false ? "checked" : ""}> Bật gửi Telegram</label>`, "Không đăng MXH. File > 50 MB Telegram từ chối.");
   }
   if (id === "publish") {
     const chs = D.channels.filter((c) => !S.chq || c.name.toLowerCase().includes(S.chq.toLowerCase()));
@@ -707,7 +736,8 @@ export async function render(view, ctx) {
           w.publish.on = false; w.editor.on = false; w.editor.telegram = false;
           dirty = true;
         } else if (id === "editor") {
-          w.editor = { ...(w.editor || {}), on: !has, telegram: !has };
+          if (has) { S.sel = "editor"; S.view = "flow"; paint(); return; }
+          enableTelegram(w, D);
           dirty = true;
         } else if (id === "publish" || id === "post") {
           w.publish.on = !has;
@@ -737,6 +767,10 @@ export async function render(view, ctx) {
       if (t.dataset.fam) { w.content.families = [t.dataset.fam]; if (t.dataset.fam !== "A4") w.a4_line = false; else if (w.a4_line == null) w.a4_line = true; touch(); return; }
       if (t.dataset.lang) { w.lang = t.dataset.lang; touch(); return; }
       if (t.dataset.target) { w.publish.target = t.dataset.target; touch(); return; }
+      if (t.dataset.tggroup) {
+        w.editor = { ...(w.editor || {}), on: true, telegram: true, telegram_group: t.dataset.tggroup };
+        touch(); return;
+      }
       if (t.hasAttribute("data-chall") || t.hasAttribute("data-chnone")) {
         const vis = D.channels.filter((c) => !S.chq || c.name.toLowerCase().includes(S.chq.toLowerCase())).map((c) => c.cid);
         const s = new Set(w.publish.channels); vis.forEach((c) => (t.hasAttribute("data-chall") ? s.add(c) : s.delete(c))); w.publish.channels = [...s]; touch(); return;
