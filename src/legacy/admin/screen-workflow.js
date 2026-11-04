@@ -166,13 +166,13 @@ function pickGroupHtml(name, list, selected, gid, groups, curGroup) {
     const extra = id === "editor" ? tgGroupChipsHtml(groups || [], curGroup, chk) : "";
     return `<label class="small wf-pick-i"><input type="checkbox" data-nid="${esc(id)}" ${chk ? "checked" : ""} ${core ? "disabled" : ""}> ${esc(l)}${core ? " · bắt buộc" : ""}</label>${extra}`;
   }).join("");
-  return `<div class="wf-pick-g" data-open="1"${gid ? ` data-gid="${esc(gid)}"` : ""}>
+  return `<div class="wf-pick-g" data-open="0"${gid ? ` data-gid="${esc(gid)}"` : ""}>
       <div class="wf-pick-h">
-        <button class="btn sm icon" type="button" data-exp aria-expanded="true" title="Xem mục">▾</button>
+        <button class="btn sm icon" type="button" data-exp aria-expanded="false" title="Xem mục">▸</button>
         <label class="small" style="flex:1;display:flex;align-items:center;gap:6px"><input type="checkbox" data-gchk> <b>${esc(name)}</b></label>
         ${gid ? `<button class="ge-ico plus" type="button" data-add-i title="Thêm mục" aria-label="Thêm mục">${ICO_PLUS}</button>` : ""}
       </div>
-      <div class="wf-pick-items">${items || '<span class="small muted">Chưa có mục</span>'}</div>
+      <div class="wf-pick-items" hidden>${items || '<span class="small muted">Chưa có mục</span>'}</div>
     </div>`;
 }
 
@@ -737,19 +737,16 @@ export async function render(view, ctx) {
     window.removeEventListener("pointermove", onPanMove);
     window.removeEventListener("pointerup", endPan);
     window.removeEventListener("pointercancel", endPan);
-    window.removeEventListener("mousemove", onPanMove);
-    window.removeEventListener("mouseup", endPan);
   };
   el.addEventListener("pointerdown", (e) => {
     const cv = e.target.closest(".wf-canvas");
     if (!cv || e.button !== 0) return;
+    if (e.target.closest(".wf-n, button, a, input, select, label")) return;
     pan = { cv, x: e.clientX, y: e.clientY, sl: cv.scrollLeft, st: cv.scrollTop, moved: false };
     cv.classList.add("panning");
     window.addEventListener("pointermove", onPanMove);
     window.addEventListener("pointerup", endPan);
     window.addEventListener("pointercancel", endPan);
-    window.addEventListener("mousemove", onPanMove);
-    window.addEventListener("mouseup", endPan);
   }, true);
   el.addEventListener("click", (e) => {
     const cv = e.target.closest(".wf-canvas");
@@ -766,7 +763,9 @@ export async function render(view, ctx) {
         const picks = await newWorkflowPopup(el, `Workflow ${D.workflows.length + 1}`, paletteOf(), tgGroups(D));
         if (!picks) return;
         const r = await api.workflowSave(null, workflowFromPicks(picks));
-        S.wid = r.id; await reloadAll(); toast("Đã tạo workflow"); return;
+        D.workflows = [...(D.workflows || []), { ...r, runs: r.runs || [] }];
+        S.wid = r.id; try { sessionStorage.setItem("vcb_wid", S.wid); } catch {}
+        pick(); dirty = false; paint(); toast("Đã tạo workflow"); return;
       }
       if (t.hasAttribute("data-edit-pal")) {
         if (!w) return;
@@ -802,15 +801,15 @@ export async function render(view, ctx) {
         const id = t.dataset.add;
         const has = on(w, id);
         const core = !nodeOf(id)?.opt && id !== "review" && id !== "g2" && id !== "footage";
-        if (has && core) { S.sel = id; S.view = "flow"; paint(); return; }
+        if (has && core) { S.sel = id; S.view = "flow"; touch(); return; }
         if (id === "footage") { w.content.families = has ? ["A1"] : ["A4"]; w.a4_line = !has; dirty = true; }
         else if (id === "review") { w.build.auto_render = has; dirty = true; }
         else if (id === "g2") {
-          if (has) { S.sel = "g2"; S.view = "flow"; paint(); return; }
+          if (has) { S.sel = "g2"; S.view = "flow"; touch(); return; }
           w.publish.on = false; w.editor.on = false; w.editor.telegram = false;
           dirty = true;
         } else if (id === "editor") {
-          if (has) { S.sel = "editor"; S.view = "flow"; paint(); return; }
+          if (has) { S.sel = "editor"; S.view = "flow"; touch(); return; }
           enableTelegram(w, D);
           dirty = true;
         } else if (id === "publish" || id === "post") {
@@ -829,7 +828,7 @@ export async function render(view, ctx) {
           w.block_on = { ...(w.block_on || {}), [id]: !has };
           dirty = true;
         }
-        S.sel = id === "post" ? "publish" : id; S.view = "flow"; paint(); return;
+        S.sel = id === "post" ? "publish" : id; S.view = "flow"; touch(); return;
       }
       if (t.dataset.off) {
         const id = t.dataset.off;

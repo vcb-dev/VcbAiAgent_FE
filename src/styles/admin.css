@@ -303,8 +303,7 @@ details > summary { cursor: pointer; }
 .bar .bt i{display:block;height:100%;border-radius:4px}
 @media (max-width:640px){.sq-edit{padding-left:14px}.sq img{display:none}}
 .xmodal{position:fixed;z-index:61;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,calc(100vw - 32px));display:grid;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
-.xmodal.wide{width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 40px);overflow:auto;align-content:start;gap:14px;border-radius:16px;border:1px solid color-mix(in srgb,var(--ink) 10%,var(--line));background:color-mix(in srgb,var(--pane) 92%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
-@media (prefers-reduced-motion:reduce){.xmodal.wide{backdrop-filter:none;-webkit-backdrop-filter:none}}
+.xmodal.wide{width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 40px);overflow:auto;align-content:start;gap:14px;border-radius:16px;border:1px solid color-mix(in srgb,var(--ink) 10%,var(--line));background:var(--pane)}
 .ge-g{display:grid;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--pane-2)}
 .ge-title,.ge-i{display:flex;gap:8px;flex-wrap:nowrap;align-items:end}
 .ge-title .small,.ge-i .small{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -489,7 +488,7 @@ button.vcard { padding: 0; text-align: left; font: inherit; cursor: pointer; }
 .wf-c { width: 24px; height: 24px; border-radius: 7px; font: 700 10px var(--mono); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .g-trig { background: #2B4A6B; color: #A9CBEA; } .g-content { background: #3B2A1E; color: #E8B98A; } .g-build { background: #1E3348; color: #7FB0DE; }
 .g-check { background: #3A2340; color: #D6A8E4; } .g-out { background: #2A2416; color: #D4AF5A; } .g-learn { background: #173A27; color: #5BC48A; } .g-warn { background: #3A2617; color: #E0965A; }
-.wf-canvas { flex: 1; min-width: 0; overflow: auto; background-color: var(--stage); background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; user-select: none; touch-action: none; }
+.wf-canvas { flex: 1; min-width: 0; overflow: auto; background-color: var(--stage); background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; user-select: none; touch-action: none; contain: layout paint; }
 .wf-canvas.panning, .wf-canvas.panning * { cursor: grabbing !important; }
 .wf-inner { position: relative; height: 560px; min-width: 100%; }
 .wf-inner svg { position: absolute; left: 0; top: 0; }
