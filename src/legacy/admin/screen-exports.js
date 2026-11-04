@@ -33,7 +33,7 @@ function grid(items, tg) {
   return `<div class="cgrid" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">${list.slice(0, shown).map((it) => {
     const st = state(it.name);
     const on = chosen.has(it.name);
-    const sentAt = tg.sent[it.name];
+    const sentAt = (tg.sent && tg.sent[it.name]) || it.telegram_sent;
     return `<button type="button" class="cclip xcard${picked === it.name ? " sel" : ""}${on ? " picked" : ""}" data-name="${esc(it.name)}" aria-pressed="${selecting ? on : "false"}">
       <span class="tmb" style="aspect-ratio:9/16"><img src="${esc(url(it.name, "thumb"))}" alt="" loading="lazy" onerror="this.remove()">
         ${it.family ? `<span class="lb" style="background:var(--tag${esc(it.family)}-bg);color:var(--tag${esc(it.family)})">${esc(it.family)}</span>` : ""}
@@ -53,7 +53,7 @@ function grid(items, tg) {
 function viewer(items, tg) {
   const it = items.find((x) => x.name === picked);
   if (!it) return "";
-  const sentAt = tg.sent[it.name];
+  const sentAt = (tg.sent && tg.sent[it.name]) || it.telegram_sent;
   return `<div class="scrim" data-close></div><aside class="drawer" aria-label="Xem video" style="width:min(460px,100vw)">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
       <span style="display:flex;gap:8px;align-items:center">${it.family ? `<span class="fam ${esc(it.family)}">${esc(it.family)}</span>` : ""}<span class="chip mono">${esc(tag(it.lang))}</span><span class="mono small">${esc(it.sku)}</span></span>

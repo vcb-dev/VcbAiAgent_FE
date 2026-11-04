@@ -180,17 +180,38 @@ function webSec(w) {
 }
 
 function keysSec(s) {
-  return `<section class="box" style="padding:4px 16px">${Object.entries(s.keys).map(([name, k]) => `<div class="krow">
+  const hide = (n) => n === "TELEGRAM_BOT_TOKEN" || n.startsWith("TELEGRAM_CHAT");
+  const groups = s.telegram_groups || [];
+  const ready = s.keys.TELEGRAM_BOT_TOKEN?.set && groups.some((g) => g.set);
+  const gro = (g) => `<div class="krow" data-tgrow="${esc(g.id)}">
+      <input class="in" data-tglabel value="${esc(g.label)}" placeholder="Tên nhóm" style="width:88px" aria-label="Tên nhóm">
+      <select class="in" data-tglang style="width:120px" aria-label="Ngôn ngữ">
+        ${[["vi", "VN · Việt"], ["es", "TBN · Tây Ban Nha"], ["en", "EN"], ["th", "TH"], ["ja", "JA"]].map(([v, l]) => `<option value="${v}" ${g.lang === v ? "selected" : ""}>${l}</option>`).join("")}
+      </select>
+      <input class="in mono" data-tgchat autocomplete="off" spellcheck="false" placeholder="${g.set ? `Đã lưu · ${esc(g.masked)}` : "Chat ID, vd. -100…"}" style="flex:1;min-width:160px" aria-label="Chat ID ${esc(g.label)}">
+      <span class="dot ${g.set ? "ok" : ""}" title="${g.set ? "Đã lưu" : "Trống"}"></span>
+      ${["vn", "tbn"].includes(g.id) ? "" : `<button class="btn sm danger" type="button" data-tgdel="${esc(g.id)}">Xoá</button>`}
+    </div>`;
+  return `<section class="box" style="padding:4px 16px">${Object.entries(s.keys).filter(([n]) => !hide(n)).map(([name, k]) => `<div class="krow">
       <span class="kn">${esc(KEY_VI[name] || k.label)}</span>
       <input class="in" type="password" autocomplete="off" spellcheck="false" data-key="${esc(name)}" aria-label="${esc(KEY_VI[name] || k.label)}" placeholder="${k.set ? `Đã lưu · ${esc(k.masked)}` : "Dán vào đây"}" style="flex:1;min-width:200px">
       <span class="dot ${k.set ? "ok" : ""}" title="${k.set ? "Đã lưu" : "Trống"}"></span>
       <button class="btn sm ink" type="button" data-savekey="${esc(name)}">Lưu</button>
       ${k.source === "admin" ? `<button class="btn sm danger" type="button" data-delkey="${esc(name)}">Xoá</button>` : ""}</div>`).join("")}</section>
     <p class="muted small" style="margin:0">Khoá chỉ lưu trên máy này, có hiệu lực ngay.</p>
-    <section class="box pad"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2>Telegram · gửi video</h2>
-        <span class="chip ${s.keys.TELEGRAM_BOT_TOKEN?.set && s.keys.TELEGRAM_CHAT_ID?.set ? "ok" : ""}">${s.keys.TELEGRAM_BOT_TOKEN?.set ? (s.keys.TELEGRAM_CHAT_ID?.set ? "Sẵn sàng" : "Thiếu chat ID") : "Chưa có token"}</span>
-        <div style="flex:1"></div><button class="btn sm" type="button" id="tg-detect" ${s.keys.TELEGRAM_BOT_TOKEN?.set ? "" : "disabled"}>Tìm chat ID</button></div>
-      <div class="muted small">Nhắn 1 tin bất kỳ cho bot (hoặc thêm bot vào nhóm rồi nhắn trong nhóm), sau đó bấm "Tìm chat ID" và chọn nơi nhận video.</div>
+    <section class="box pad"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2>Telegram · nhóm nhận video</h2>
+        <span class="chip ${ready ? "ok" : ""}">${s.keys.TELEGRAM_BOT_TOKEN?.set ? (ready ? "Sẵn sàng" : "Thiếu chat ID nhóm") : "Chưa có token"}</span>
+        <div style="flex:1"></div>
+        <button class="btn sm" type="button" id="tg-add">+ Thêm nhóm</button>
+        <button class="btn sm" type="button" id="tg-detect" ${s.keys.TELEGRAM_BOT_TOKEN?.set ? "" : "disabled"}>Tìm chat ID</button>
+        <button class="btn sm ink" type="button" id="tg-save-groups">Lưu nhóm</button></div>
+      <div class="muted small">VN nhận video tiếng Việt, TBN nhận tiếng Tây Ban Nha. Workflow chọn nhóm, hoặc để trống = theo ngôn ngữ xuất. Token bot dán ở hàng Telegram bên trên — thêm bot vào từng nhóm rồi dán chat ID.</div>
+      <div class="krow">
+        <span class="kn">Token bot</span>
+        <input class="in" type="password" autocomplete="off" spellcheck="false" data-key="TELEGRAM_BOT_TOKEN" placeholder="${s.keys.TELEGRAM_BOT_TOKEN?.set ? `Đã lưu · ${esc(s.keys.TELEGRAM_BOT_TOKEN.masked)}` : "Dán token bot"}" style="flex:1;min-width:200px">
+        <button class="btn sm ink" type="button" data-savekey="TELEGRAM_BOT_TOKEN">Lưu</button>
+      </div>
+      <div id="tg-group-rows">${groups.map(gro).join("") || gro({ id: "vn", label: "VN", lang: "vi", set: false, masked: "" }) + gro({ id: "tbn", label: "TBN", lang: "es", set: false, masked: "" })}</div>
       <div id="tg-chats"></div></section>`;
 }
 
@@ -560,17 +581,45 @@ export async function render(view, ctx) {
         if (btn.dataset.armed !== "1") { btn.dataset.armed = "1"; btn.textContent = "Bấm lần nữa để khôi phục"; return; }
         await api.aiPrompt(""); toast("Đã khôi phục prompt mặc định"); await refresh(); return;
       }
+      if (btn.id === "tg-add") {
+        const box = el.querySelector("#tg-group-rows");
+        const id = `g${Math.random().toString(36).slice(2, 6)}`;
+        box.insertAdjacentHTML("beforeend", `<div class="krow" data-tgrow="${id}">
+          <input class="in" data-tglabel value="" placeholder="Tên nhóm" style="width:88px">
+          <select class="in" data-tglang style="width:120px"><option value="vi">VN · Việt</option><option value="es">TBN · Tây Ban Nha</option><option value="en">EN</option><option value="th">TH</option><option value="ja">JA</option></select>
+          <input class="in mono" data-tgchat placeholder="Chat ID" style="flex:1;min-width:160px">
+          <button class="btn sm danger" type="button" data-tgdel="${id}">Xoá</button></div>`);
+        return;
+      }
+      if (btn.dataset.tgdel) { btn.closest("[data-tgrow]")?.remove(); return; }
+      if (btn.id === "tg-save-groups") {
+        const groups = [...el.querySelectorAll("#tg-group-rows [data-tgrow]")].map((row) => ({
+          id: row.dataset.tgrow, label: row.querySelector("[data-tglabel]")?.value || row.dataset.tgrow,
+          lang: row.querySelector("[data-tglang]")?.value || "vi",
+          chat_id: row.querySelector("[data-tgchat]")?.value.trim() || "",
+        }));
+        await api.telegramGroupsSave(groups); toast("Đã lưu nhóm Telegram"); await refresh(); return;
+      }
       if (btn.id === "tg-detect") {
         btn.disabled = true;
         try {
           const { chats } = await api.telegramDetect();
+          const groups = [...el.querySelectorAll("#tg-group-rows [data-tgrow]")];
           el.querySelector("#tg-chats").innerHTML = chats.length ? chats.map((c) => `<div class="krow"><span class="kn">${esc(c.title || "(không tên)")}</span>
-              <span class="mono small muted" style="flex:1">${esc(c.id)} · ${esc(c.type)}</span><button class="btn sm ink" type="button" data-tgchat="${esc(c.id)}">Gửi video về đây</button></div>`).join("")
-            : '<div class="muted small">Chưa thấy tin nhắn nào gửi tới bot — nhắn cho bot rồi bấm lại.</div>';
+              <span class="mono small muted" style="flex:1">${esc(c.id)} · ${esc(c.type)}</span>
+              ${groups.map((g) => `<button class="btn sm ink" type="button" data-tgchat="${esc(c.id)}" data-tginto="${esc(g.dataset.tgrow)}">Gắn ${esc(g.querySelector("[data-tglabel]")?.value || g.dataset.tgrow)}</button>`).join("")}
+            </div>`).join("")
+            : '<div class="muted small">Chưa thấy tin nhắn nào gửi tới bot — thêm bot vào nhóm, nhắn 1 tin, rồi bấm lại.</div>';
         } finally { btn.disabled = false; }
         return;
       }
-      if (btn.dataset.tgchat) { await api.aiKeys({ TELEGRAM_CHAT_ID: btn.dataset.tgchat }); toast("Đã chọn nơi nhận video Telegram"); await refresh(); return; }
+      if (btn.dataset.tgchat && btn.dataset.tginto) {
+        const row = el.querySelector(`[data-tgrow="${btn.dataset.tginto}"]`);
+        const inp = row?.querySelector("[data-tgchat]");
+        if (inp) inp.value = btn.dataset.tgchat;
+        toast("Đã điền chat ID — bấm Lưu nhóm");
+        return;
+      }
       if (btn.dataset.savekey) {
         const v = el.querySelector(`[data-key="${btn.dataset.savekey}"]`).value.trim();
         if (!v) { toast("Dán khoá trước khi lưu", true); return; }

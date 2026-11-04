@@ -10,7 +10,7 @@ import { appUrl, esc } from "./format-helpers.js";
 const $ = (id) => document.getElementById(id);
 const PFC = { facebook: ["FB", "#1877F2"], instagram: ["IG", "#C13584"], tiktok: ["TT", "#E11D48"] };
 const X = {
-  open: false, job: null, dl: true, pkg: false, tpl: false, tplName: "", sch: false, ch: new Set(), when: "", chq: "",
+  open: false, job: null, dl: false, pkg: false, tpl: false, tplName: "", sch: false, ch: new Set(), when: "", chq: "",
   tg: true, chans: null, tgReady: null, phase: "idle", st: null, msg: "", saved: "", downloaded: false, timer: 0,
 };
 
@@ -143,7 +143,7 @@ function body() {
   return `<div class="xp-head"><h2>Xuất video</h2><button class="xp-x" type="button" data-xclose aria-label="Đóng">✕</button></div>
     <div class="xp-sub2">${hd ? `Bản ${r.revision} · HD 720×1280 đã sẵn sàng` : `Bản hiện tại là ${r.status === "rendering" ? "đang dựng" : "bản nháp 360p"} — bấm Xuất sẽ tự render bản HD rồi làm tiếp`}</div>
     <div class="xp-opts">
-      ${opt("xp-dl", X.dl, "⤓ Tải MP4 về máy", "720×1280 HD · −14 LUFS · cũng chép vào thư mục OUTPUT")}
+      ${opt("xp-dl", X.dl, "⤓ Tải MP4 về máy", "Mặc định lưu trên R2 (folder render/). Chỉ tick nếu muốn tải bản về máy này.")}
       ${opt("xp-sch", X.sch, "🗓 Lên lịch đăng", "TikTok · Facebook · Instagram theo kênh đã kết nối", `<div class="xp-more">${chanList()}</div>`)}
       ${opt("xp-tg", X.tg, "✈ Gửi qua Telegram", X.tgReady === false ? "Chưa cài bot — điền token và chat ID ở Cài đặt › Khoá kết nối" : "Tự gửi vào nhóm khi xuất HD xong", "", X.tgReady === false)}
       ${opt("xp-pkg", X.pkg, "🗂 Gói dữ liệu cho dev", "MP4 + phụ đề SRT + timeline.json + VO từng phần")}
@@ -153,7 +153,7 @@ function body() {
     </div>
     ${X.phase !== "idle" ? `<div class="xp-status">${X.phase === "working" || X.phase === "done" ? progress() : ""}${results()}</div>` : ""}
     <div class="xp-foot"><button class="xp-cancel" type="button" data-xclose>${X.phase === "done" ? "Đóng" : "Huỷ"}</button>
-      <button class="export-btn xp-go" type="button" id="xp-go" ${working || (!X.dl && !X.sch && !X.tg && !X.pkg && !X.tpl) ? "disabled" : ""}>${working ? "Đang xuất…" : X.phase === "done" ? "Xuất lại" : "Xuất"}</button></div>`;
+      <button class="export-btn xp-go" type="button" id="xp-go" ${working ? "disabled" : ""}>${working ? "Đang xuất…" : X.phase === "done" ? "Xuất lại" : "Xuất"}</button></div>`;
 }
 
 function paint() {

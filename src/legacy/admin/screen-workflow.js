@@ -497,7 +497,13 @@ function inspector(w, D) {
   if (id === "check") body = f("Điều kiện", `<span style="display:flex;gap:8px;align-items:center">Điểm dự đoán ≥ <input class="in mono" type="number" min="0" max="100" data-k="check.threshold" value="${w.check.threshold}" style="width:80px"></span>`,
     "Điểm dự đoán = điểm trung bình các video cùng tuyến trên kênh (cần ≥ 3 video có số liệu, chưa đủ thì tính là Sai)")
     + f("Đúng", '<span class="small">Lên lịch đăng ngay theo giờ từng kênh</span>') + f("Sai", `<span class="small">${on(w, "editor") ? "Chờ Editor duyệt" : "Vẫn lên lịch (khối Editor duyệt đang tắt)"}</span>`);
-  if (id === "editor") body = f("Telegram", `<label class="small"><input type="checkbox" class="chk" data-b="editor.telegram" ${w.editor?.telegram ? "checked" : ""}> Gửi video vào nhóm khi HD xong</label>`, "Không đăng MXH, không lên Facebook / Instagram / TikTok. File > 50 MB Telegram từ chối.");
+  if (id === "editor") {
+    const gs = D.telegram_groups || [];
+    const cur = w.editor?.telegram_group || "";
+    body = f("Telegram", `<label class="small"><input type="checkbox" class="chk" data-b="editor.telegram" ${w.editor?.telegram ? "checked" : ""}> Gửi video vào nhóm khi HD xong</label>`, "Không đăng MXH. File > 50 MB Telegram từ chối.")
+      + f("Nhóm nhận", `<select class="in" data-k="editor.telegram_group">${[["", "Theo ngôn ngữ xuất (VI → VN, ES → TBN)"], ...gs.map((g) => [g.id, `${g.label}${g.set ? "" : " · chưa có ID"}`])].map(([v, l]) => `<option value="${esc(v)}" ${cur === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`,
+        "Workflow tiếng Việt chọn VN, TBN chọn nhóm Tây Ban Nha. Thêm ID ở Cài đặt › Khoá kết nối.");
+  }
   if (id === "publish") {
     const chs = D.channels.filter((c) => !S.chq || c.name.toLowerCase().includes(S.chq.toLowerCase()));
     body = f("Đăng lên", `<span class="wf-chips"><button type="button" class="wf-chip" aria-pressed="${w.publish.target === "market"}" data-target="market">Mọi kênh cùng ngôn ngữ</button><button type="button" class="wf-chip" aria-pressed="${w.publish.target === "channels"}" data-target="channels">Chọn kênh</button></span>`,
