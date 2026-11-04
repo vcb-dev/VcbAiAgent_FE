@@ -380,13 +380,60 @@ function nextRun(s) {
   return "";
 }
 
+function wfBySid(auto) {
+  return Object.fromEntries((auto.workflows || []).filter((w) => w.schedule_id).map((w) => [w.schedule_id, w]));
+}
+/** Chỉ hiện workflow đang gắn Job (bật, hoặc đã thêm rồi tắt switch). Workflow tắt ở mục Workflow thì không nằm đây. */
+function boardSchedules(auto) {
+  const bySid = wfBySid(auto);
+  return (auto.schedules || []).filter((s) => s.enabled || bySid[s.id]?.enabled);
+}
+function shownScheduleIds(auto) {
+  return new Set(boardSchedules(auto).map((s) => s.id));
+}
+
+function pickWorkflowPopup(host, auto) {
+  return api.workflows().then((D) => new Promise((resolve) => {
+    const shown = shownScheduleIds(auto);
+    const list = (D.workflows || []).filter((w) => !w.schedule_id || !shown.has(w.schedule_id));
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<div class="scrim" data-no></div>
+      <div class="box pad xmodal" role="dialog" aria-modal="true">
+        <b>Thêm workflow vào Job</b>
+        <p class="small muted" style="margin:0;line-height:1.45">Chọn một workflow đã tạo ở mục Workflow. Tạo mới cũng làm ở đó.</p>
+        ${list.length
+          ? `<div class="wf-add-list">${list.map((w) => `<button class="btn" type="button" data-pick="${esc(w.id)}" style="justify-content:space-between;width:100%">
+              <span>${esc(w.name)}</span>
+              <span class="muted small">${esc((w.lang || "vi").toUpperCase())}${w.enabled ? " · đang bật" : ""}</span>
+            </button>`).join("")}</div>`
+          : `<div class="empty" style="padding:12px">Không còn workflow nào để thêm. Tạo ở mục Workflow rồi quay lại.</div>`}
+        <div class="ge-actions">
+          <a class="btn sm" href="#/workflow">Mở mục Workflow</a>
+          <div style="flex:1"></div>
+          <button class="btn" type="button" data-no>Đóng</button>
+        </div>
+      </div>`;
+    wrap.addEventListener("click", (e) => {
+      if (e.target.closest("[data-no]")) { wrap.remove(); resolve(null); return; }
+      const b = e.target.closest("[data-pick]");
+      if (!b) return;
+      const w = list.find((x) => x.id === b.dataset.pick);
+      wrap.remove();
+      resolve(w || null);
+    });
+    host.append(wrap);
+  }));
+}
+
 function autostrip(auto) {
-  const wfs = auto.workflows || [];
-  const bySid = Object.fromEntries(wfs.filter((w) => w.schedule_id).map((w) => [w.schedule_id, w]));
-  if (!auto.schedules.length) {
-    return `<section class="box autostrip" aria-label="Lịch tự động"><strong>Tự động</strong><span class="muted">Chưa có workflow / lịch</span><div style="flex:1"></div>
+  const bySid = wfBySid(auto);
+  const listed = boardSchedules(auto);
+  const foot = `<div class="autostrip-foot"><button class="btn sm" type="button" data-stop-auto>Dừng & xoá job</button>
+      <button class="btn sm" type="button" data-add-wf>+ Workflow</button></div>`;
+  if (!listed.length) {
+    return `<div class="autostacks" aria-label="Workflow và lịch tự động"><section class="box autostrip" aria-label="Lịch tự động"><strong>Tự động</strong><span class="muted">Chưa gắn workflow. Bấm + Workflow để chọn từ mục Workflow.</span><div style="flex:1"></div>
       <a class="btn" href="#/workflow">Mở Workflow</a>
-      <button class="btn" type="button" data-open-plan="">Tạo lịch</button></section>`;
+      <button class="btn" type="button" data-add-wf>+ Workflow</button></section>${foot}</div>`;
   }
   const runningBy = {};
   for (const r of auto.running || []) {
@@ -416,9 +463,7 @@ function autostrip(auto) {
       <button class="btn sm" type="button" data-open-plan="${esc(s.id)}">Sửa lịch</button>
       <button class="btn sm ink" type="button" data-srun="${esc(s.id)}">Chạy ngay</button></section>`;
   };
-  return `<div class="autostacks" aria-label="Workflow và lịch tự động">${auto.schedules.map(row).join("")}
-    <div class="autostrip-foot"><button class="btn sm" type="button" data-stop-auto>Dừng & xoá job</button>
-      <a class="btn sm" href="#/workflow">+ Workflow</a></div></div>`;
+  return `<div class="autostacks" aria-label="Workflow và lịch tự động">${listed.map(row).join("")}${foot}</div>`;
 }
 
 const STAGES = [["content", "Kịch bản"], ["plan", "Timeline · voice"], ["render", "Dựng HD"], ["done", "Xuất file"]];
@@ -536,7 +581,7 @@ export async function render(view, ctx) {
     el.querySelector("#board").innerHTML = board(jobs);
     el.querySelector("#bulk").innerHTML = bulkbar();
     el.querySelector("#progress").innerHTML = progress(auto);
-    const strip = el.querySelector(".autostrip");
+    const strip = el.querySelector(".autostacks") || el.querySelector(".autostrip");
     if (strip) strip.outerHTML = autostrip(auto);
     if (drawer) { el.querySelector("#sched").innerHTML = schedulesBox(auto); }
     ctx.refreshBadges();
@@ -801,6 +846,15 @@ export async function render(view, ctx) {
         b.disabled = true;
         await api.automationCancel();
         toast("Đã dừng tự động · đã xoá job đang dựng"); await reload(); return;
+      }
+      if (b.hasAttribute("data-add-wf")) {
+        const w = await pickWorkflowPopup(el, auto);
+        if (!w) return;
+        b.disabled = true;
+        await api.workflowSave(w.id, { ...w, enabled: true });
+        toast(`Đã thêm “${w.name}” vào Job tự động`);
+        await reload();
+        return;
       }
       if (b.dataset.openPlan !== undefined) { editing = b.dataset.openPlan || null; drawer = true; paint(); return; }
       if (b.dataset.flip) {
