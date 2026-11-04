@@ -28,6 +28,17 @@ function setJob(job) {
   emit();
 }
 
+async function hydrateLibrary(sku) {
+  store.boot.library = store.boot.library || [];
+  if (!sku || store.boot._libSku === sku) return;
+  try {
+    const { clips } = await api.library({ sku, limit: 400 });
+    const keep = (store.boot.library || []).filter((c) => c.product_set !== sku);
+    store.boot.library = [...(clips || []), ...keep];
+    store.boot._libSku = sku;
+  } catch { /* panel footage trống, job vẫn mở */ }
+}
+
 function poll() {
   clearInterval(poller);
   const id = store.job.id;
@@ -76,8 +87,16 @@ export async function run(label, action) {
 }
 
 export const actions = {
-  build: (body) => run("Đang lập kế hoạch, lồng tiếng giọng HuyK, chọn footage", () => api.createJob(body)),
-  load: (id) => run("Đang mở dự án", () => api.getJob(id)),
+  build: (body) => run("Đang lập kế hoạch, lồng tiếng giọng HuyK, chọn footage", async () => {
+    const job = await api.createJob(body);
+    await hydrateLibrary(job.sku);
+    return job;
+  }),
+  load: (id) => run("Đang mở dự án", async () => {
+    const job = await api.getJob(id);
+    await hydrateLibrary(job.sku);
+    return job;
+  }),
   choose: (partId, shotIndex, option) => run("Đang thay cảnh", () => api.select(store.job.id, { part_id: partId, shot_index: shotIndex, option })),
   emotion: (partId, emotion) => run("Đang đọc lại giọng HuyK với cảm xúc mới", () => api.emotion(store.job.id, partId, emotion)),
   settings: (partial) => run(partial.voice ? "Đang đổi giọng đọc" : "Đang áp dụng tùy chọn", () => api.settings(store.job.id, partial)),

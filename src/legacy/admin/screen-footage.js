@@ -34,6 +34,7 @@ const isCraftOrigin = () => ORIGINS.find((o) => o.key === st.origin)?.kind === "
 const canSort = () => st.lib === "product" && !!st.sku && isCraftOrigin();
 const isFinished = (c) => c.craft_step === "hoan_thien" || (c.roles?.product_final || 0) >= 0.5;
 let covRef = { rows: [], columns: [] };
+let summaryRef = { huyk: 0, outro: 0 };
 const libOf = (c) => (c.library === "huyk" ? "huyk" : c.library === "outro" ? "outro" : c.library === "illus" ? "illus" : "product");
 const readySkus = () => new Set((covRef.rows || []).filter((r) => r.ready).map((r) => r.sku));
 const shownProduct = (c) => libOf(c) !== "product" || (c.product_set && readySkus().has(c.product_set));
@@ -85,20 +86,18 @@ function skuClips(lib, sku = st.sku) {
   return productClips(lib, sku).filter(matchOrigin);
 }
 function skuRows(lib, cov) {
-  const clips = lib.filter((c) => inLib(c) && (!st.cat || catOf(c) === st.cat));
   const q = st.q.trim().toLowerCase();
-  const skus = new Set(clips.map((c) => c.product_set).filter(Boolean));
-  return cov.rows.filter((r) => r.ready && skus.has(r.sku)).filter((r) => {
+  return (cov.rows || []).filter((r) => r.ready).filter((r) => {
     if (!q) return true;
-    const of = clips.find((c) => c.product_set === r.sku);
-    return `${r.sku} ${r.name || ""} ${of?.description_vi || ""}`.toLowerCase().includes(q);
+    return `${r.sku} ${r.name || ""}`.toLowerCase().includes(q);
   }).map((r) => {
-    const of = clips.filter((c) => c.product_set === r.sku);
-    const os = originStats(of);
-    const filled = CRAFT_UI.filter((s) => of.some((c) => c.craft_step === s)).length;
+    const of = lib.filter((c) => c.product_set === r.sku);
+    const n = of.length || r.clips || 0;
+    const filled = of.length ? CRAFT_UI.filter((s) => of.some((c) => c.craft_step === s)).length : (r.craft_steps || 0);
+    const os = of.length ? originStats(of) : [];
     const ht = of.filter(isFinished).length;
     const src = [os.map((o) => `${o.label.split(" ")[0]} ${o.cov}cd`).join(" · "), ht ? `HT ${ht}` : ""].filter(Boolean).join(" · ");
-    return { key: r.sku, label: r.sku, sub: r.name, n: of.length, cov: filled, total: CRAFT_UI.length, thumb: of[0]?.thumb, src };
+    return { key: r.sku, label: r.sku, sub: r.name, n, cov: filled, total: CRAFT_UI.length, thumb: of[0]?.thumb || r.thumb, src };
   });
 }
 function stepRows(lib) {
@@ -117,8 +116,8 @@ function originRows(lib) {
   const outro = lib.filter((c) => libOf(c) === "outro");
   const extra = [
     { key: "final", label: "Sản phẩm hoàn thiện", sub: "SP đã xong · beauty / visual của mã này", n: final.length, thumb: final[0]?.thumb },
-    { key: "huyk", label: "HuyK", sub: "Nói, ra hiệu, làm nghề — dùng chung mọi mã", n: huyk.length, thumb: huyk[0]?.thumb },
-    { key: "outro", label: "Outro", sub: "Ghép cuối video của mã này", n: outro.length, thumb: outro[0]?.thumb },
+    { key: "huyk", label: "HuyK", sub: "Nói, ra hiệu, làm nghề — dùng chung mọi mã", n: huyk.length || summaryRef.huyk || 0, thumb: huyk[0]?.thumb },
+    { key: "outro", label: "Outro", sub: "Ghép cuối video của mã này", n: outro.length || summaryRef.outro || 0, thumb: outro[0]?.thumb },
   ];
   return [
     ...originStats(of).map((o) => ({ key: o.key, label: o.label, sub: o.hint, n: o.n, cov: o.cov, total: o.total, thumb: o.thumb })),
@@ -377,27 +376,49 @@ export async function render(view, ctx) {
   const el = document.createElement("div");
   el.className = "fscreen";
   view.replaceChildren(el);
-  if (!ctx.boot.library) {
-    el.innerHTML = '<div class="empty is-busy">Đang tải kho footage…</div>';
-    try {
-      const full = await Promise.race([
-        api.bootstrap(),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("AI không trả kho footage (server đang bận encode proxy). Tải lại trang.")), 25000)),
-      ]);
-      Object.assign(ctx.boot, { library: full.library, products: full.products, clip_count: full.clip_count });
-    } catch (err) {
-      el.innerHTML = `<div class="empty">${esc(err.message || err)}</div>`;
-      return;
+  ctx.boot.library = ctx.boot.library || [];
+  const pools = new Map();
+  const mergeLib = () => {
+    const seen = new Set();
+    const out = [];
+    for (const arr of pools.values()) {
+      for (const c of arr) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        out.push(c);
+      }
     }
-  }
-  let lib = ctx.boot.library;
+    ctx.boot.library = out;
+    return out;
+  };
+  const pull = async (key, params) => {
+    if (pools.has(key)) return pools.get(key);
+    const { clips } = await api.library({ limit: 400, ...params });
+    pools.set(key, clips || []);
+    return clips || [];
+  };
+  el.innerHTML = '<div class="empty is-busy">Đang tải kho footage…</div>';
+  let lib = mergeLib();
   let src, cov;
   const timed = (p, ms, fallback) => Promise.race([p, new Promise((res) => setTimeout(() => res(fallback), ms))]);
-  [src, cov, usage] = await Promise.all([
+  let summary = { huyk: 0, outro: 0 };
+  [src, cov, usage, summary] = await Promise.all([
     timed(api.sourceStatus().catch(() => ({ configured: false })), 8000, { configured: false }),
     timed(api.coverage().catch(() => ({ rows: [], columns: [] })), 15000, { rows: [], columns: [] }),
     timed(api.footageUsage().catch(() => ({})), 8000, {}),
+    timed(api.librarySummary().catch(() => ({ huyk: 0, outro: 0 })), 8000, { huyk: 0, outro: 0 }),
   ]);
+  summaryRef = summary || summaryRef;
+  const fillView = async () => {
+    try {
+      if (st.lib === "huyk" || st.origin === "huyk") await pull("huyk", { library: "huyk" });
+      else if (st.lib === "outro" || st.origin === "outro") await pull("outro", { library: "outro" });
+      else if (st.lib === "illus") await pull("illus", { library: "illus" });
+      else if (st.sku) await pull(`sku:${st.sku}`, { sku: st.sku });
+    } catch { /* lưới vẫn vẽ từ coverage */ }
+    lib = mergeLib();
+  };
+  await fillView();
   const paint = () => {
     covRef = cov || { rows: [], columns: [] };
     if (st.lib === "huyk_sp" || st.lib === "tho" || st.lib === "craft") {
@@ -491,13 +512,13 @@ export async function render(view, ctx) {
     if (!t) return;
     if (t.dataset.lib) {
       st.lib = t.dataset.lib; st.sku = ""; st.origin = ""; st.group = st.lib === "outro" ? "huyk" : "";
-      st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; paint(); return;
+      st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return;
     }
-    if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; paint(); return; }
-    if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; paint(); return; }
-    if (t.dataset.backOrigin) { st.origin = ""; st.step = ""; st.shown = 60; paint(); return; }
-    if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; paint(); return; }
-    if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; paint(); return; }
+    if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.backOrigin) { st.origin = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.step !== undefined) { st.step = st.step === t.dataset.step ? "" : t.dataset.step; st.shown = 60; paint(); return; }
     if (t.dataset.group !== undefined) { st.group = t.dataset.group; st.shown = 60; paint(); return; }
     if (t.dataset.clip) { if (dragging) return; st.picked = t.dataset.clip; el.querySelector("#fprev").innerHTML = preview(lib); return; }
@@ -513,9 +534,15 @@ export async function render(view, ctx) {
   let wasBusy = src.state === "scanning";
   let lastReload = Date.now();
   const reloadLib = async () => {
-    const boot = await api.bootstrap();
-    Object.assign(ctx.boot, { library: boot.library, products: boot.products, clip_count: boot.clip_count });
-    lib = boot.library; [cov, usage] = await Promise.all([api.coverage(), api.footageUsage().catch(() => usage)]); lastReload = Date.now(); paint();
+    pools.clear();
+    await fillView();
+    [cov, usage, summary] = await Promise.all([
+      api.coverage().catch(() => cov),
+      api.footageUsage().catch(() => usage),
+      api.librarySummary().catch(() => summary),
+    ]);
+    lastReload = Date.now();
+    paint();
   };
   let tick = 0;
   const timer = setInterval(async () => {

@@ -33,6 +33,31 @@ const STEP_VI = { thiet_ke: "Thiết kế", chuan_bi_nguyen_lieu: "Nguyên liệ
   cua_cat: "Cưa cắt", han: "Hàn", dua_mai: "Giũa mài", khoan: "Khoan", gan_da_chu: "Gắn đá chủ", dinh_da: "Đính đá", danh_bong: "Đánh bóng", hoan_thien: "Hoàn thiện" };
 let footageFilter = { scope: "sku", step: "" };
 let footageShown = 60;                 // thousands of thumbnails at once made the Studio stutter
+let footageFetch = 0;
+let footageKey = "";
+
+function pullFootage(s) {
+  const sku = s.job?.sku || "";
+  const scope = footageFilter.scope;
+  const key = `${scope}|${sku}|${footageFilter.step}`;
+  if (footageKey === key) return;
+  const params = scope === "sku" && sku ? { sku, step: footageFilter.step, limit: 120 }
+    : scope === "huyk" ? { library: "huyk", limit: 120 }
+    : scope === "illus" ? { library: "illus", limit: 80 }
+    : scope === "collected" ? { library: "collected", limit: 80 }
+    : null;
+  if (!params) { footageKey = key; return; }
+  const n = ++footageFetch;
+  api.library(params).then(({ clips }) => {
+    if (n !== footageFetch) return;
+    footageKey = key;
+    const incoming = clips || [];
+    const ids = new Set(incoming.map((c) => c.id));
+    const keep = (s.boot.library || []).filter((c) => !ids.has(c.id));
+    s.boot.library = [...incoming, ...keep];
+    renderLibrary(s);
+  }).catch(() => { footageKey = key; });
+}
 const $ = (id) => document.getElementById(id);
 
 export function initLibrary() {
@@ -53,6 +78,7 @@ function summary(job) {
 }
 
 function footageTab(s) {
+  pullFootage(s);
   const sku = s.job?.sku;
   const clips = s.boot.library.filter((c) => {
     const scope = scopeOf(c);

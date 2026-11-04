@@ -57,7 +57,8 @@ export async function startStudio() {
     tabs.innerHTML = '<span class="muted" style="padding:10px 12px">Đang tải Studio…</span>';
   }
   try {
-    store.boot = await api.bootstrap();
+    store.boot = await api.bootstrap(true);
+    store.boot.library = store.boot.library || [];
   } catch (err) {
     started = false;
     if (tabs) tabs.innerHTML = "";

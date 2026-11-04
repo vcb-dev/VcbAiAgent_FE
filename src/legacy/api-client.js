@@ -18,6 +18,15 @@ const job = (id) => `/api/jobs/${encodeURIComponent(id)}`;
 
 export const api = {
   bootstrap: (lite = false) => call(lite ? "/api/bootstrap?lite=1" : "/api/bootstrap"),
+  library: (q = {}) => {
+    const p = new URLSearchParams();
+    Object.entries(q).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+    });
+    const qs = p.toString();
+    return call(qs ? `/api/library?${qs}` : "/api/library");
+  },
+  librarySummary: () => call("/api/library/summary"),
   createJob: (body) => call("/api/jobs", { method: "POST", body: JSON.stringify(body) }),
   getJob: (id) => call(job(id)),
   jobStatus: (id) => call(`${job(id)}/status`),
