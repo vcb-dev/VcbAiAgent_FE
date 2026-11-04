@@ -656,14 +656,14 @@ export async function render(view, ctx) {
   pick();
   const header = () => `<header class="ph-bar"><h1>Workflow</h1>
     ${D.workflows.length ? `<select class="in" id="wf-pick" style="width:auto;min-height:34px;font-weight:600" aria-label="Chọn workflow">${D.workflows.map((x) => `<option value="${x.id}" ${x.id === S.wid ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
-      <input class="in" id="wf-name" value="${esc(w.name)}" aria-label="Tên workflow" style="width:220px;min-height:34px">` : ""}
+      <input class="in" id="wf-name" value="${esc(w.name)}" aria-label="Tên workflow" style="width:220px;min-height:34px">
+      <button class="btn danger" type="button" data-del>Xoá</button>` : ""}
     <button class="btn" type="button" data-new>+ Workflow mới</button>
     ${w ? `<nav class="seg" aria-label="Chế độ xem"><button type="button" aria-pressed="${S.view === "flow"}" data-view="flow">Sơ đồ</button><button type="button" aria-pressed="${S.view === "runs"}" data-view="runs">Lịch sử chạy · ${(w.runs || []).length}</button></nav>` : ""}
     <div class="sp"></div>
     ${w ? `<span class="small muted">${w.enabled ? `Chạy lúc ${esc(w.trigger.times.join(", "))} · ${(w.lang || "vi").toUpperCase()} · ${esc(famOf(w))}` : "Đang tắt"}</span>
       <span class="small muted" style="display:flex;gap:8px;align-items:center">Đang chạy <button class="switch" type="button" role="switch" aria-checked="${w.enabled}" data-enable aria-label="Bật workflow"></button></span>
-      <button class="btn" type="button" data-run>▶ Chạy thử</button><button class="btn pri" type="button" data-save>${dirty ? "Lưu thay đổi" : "Đã lưu"}</button>
-      <button class="btn icon danger" type="button" data-del aria-label="Xoá workflow" title="Xoá workflow">✕</button>` : ""}</header>`;
+      <button class="btn" type="button" data-run>▶ Chạy thử</button><button class="btn pri" type="button" data-save>${dirty ? "Lưu thay đổi" : "Đã lưu"}</button>` : ""}</header>`;
   const palette = () => {
     if (!w) return "";
     const groups = paletteOf().map(([name, g, list]) => `<div class="wf-pg"><span class="wf-pgt">${name}</span>
