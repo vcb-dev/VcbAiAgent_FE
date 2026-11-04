@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const PFC = { facebook: ["FB", "#1877F2"], instagram: ["IG", "#C13584"], tiktok: ["TT", "#E11D48"] };
 const X = {
   open: false, job: null, dl: true, pkg: false, tpl: false, tplName: "", sch: false, ch: new Set(), when: "", chq: "",
-  tg: false, chans: null, tgReady: null, phase: "idle", st: null, msg: "", saved: "", downloaded: false, timer: 0,
+  tg: true, chans: null, tgReady: null, phase: "idle", st: null, msg: "", saved: "", downloaded: false, timer: 0,
 };
 
 function resetFor(job) {
@@ -32,7 +32,7 @@ async function openDialog() {
       if (!X.ch.size) X.chans.filter((c) => c.lang === lang).forEach((c) => X.ch.add(c.cid));
       paint();
     }).catch(() => { X.chans = []; paint(); });
-    api.telegramStatus().then((t) => { X.tgReady = !!t.ready; paint(); }).catch(() => { X.tgReady = false; paint(); });
+    api.telegramStatus().then((t) => { X.tgReady = !!t.ready; if (X.tgReady) X.tg = true; paint(); }).catch(() => { X.tgReady = false; paint(); });
   }
 }
 
@@ -145,7 +145,7 @@ function body() {
     <div class="xp-opts">
       ${opt("xp-dl", X.dl, "⤓ Tải MP4 về máy", "720×1280 HD · −14 LUFS · cũng chép vào thư mục OUTPUT")}
       ${opt("xp-sch", X.sch, "🗓 Lên lịch đăng", "TikTok · Facebook · Instagram theo kênh đã kết nối", `<div class="xp-more">${chanList()}</div>`)}
-      ${opt("xp-tg", X.tg, "✈ Gửi qua Telegram", X.tgReady === false ? "Chưa cài bot — điền token và chat ID ở Cài đặt › Khoá kết nối" : "Gửi file video vào nhóm / chat đã cài", "", X.tgReady === false)}
+      ${opt("xp-tg", X.tg, "✈ Gửi qua Telegram", X.tgReady === false ? "Chưa cài bot — điền token và chat ID ở Cài đặt › Khoá kết nối" : "Tự gửi vào nhóm khi xuất HD xong", "", X.tgReady === false)}
       ${opt("xp-pkg", X.pkg, "🗂 Gói dữ liệu cho dev", "MP4 + phụ đề SRT + timeline.json + VO từng phần")}
       ${opt("xp-tpl", X.tpl, "Lưu làm template dựng", "Giữ cách cắt shot, độ dài, nhạc, phụ đề, logo, chuyển cảnh, footage tải lên / HuyK. Lần sau chọn ở tab Kịch bản › “Template dựng đã lưu”.",
         `<div class="xp-more"><input class="xp-in" id="xp-tplname" maxlength="80" value="${esc(X.tplName)}" placeholder="Tên template" aria-label="Tên template"></div>`)}

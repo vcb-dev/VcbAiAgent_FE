@@ -402,7 +402,7 @@ function sub(w, id, D) {
   if (id === "review") return "Người duyệt tích job rồi bấm Duyệt & render";
   if (id === "g2") return "Chờ người xem ở Duyệt. Không đăng MXH, không gửi Telegram.";
   if (id === "check") return "Đúng: lên lịch · Sai: chờ Editor";
-  if (id === "editor") return w.editor.telegram ? "Gửi video vào nhóm Telegram" : "Chờ duyệt trong Lịch đăng";
+  if (id === "editor") return w.editor?.telegram ? "Gửi video vào nhóm Telegram" : "Chờ duyệt trong Lịch đăng";
   if (id === "publish") return w.publish.target === "market" ? "Mọi kênh cùng ngôn ngữ video" : `${(w.publish.channels || []).length} kênh đã chọn`;
   if (id === "post") return "FB Reels · Instagram · TikTok hộp thư";
   if (id === "stats") return `Content win ≥ ${(D.win || 100000).toLocaleString(globalThis.VCB_LOC || "vi-VN")} view`;
@@ -413,25 +413,35 @@ function sub(w, id, D) {
 function canvas(w, D) {
   const { main, pos, width } = layout(w);
   const W = 196, PY = 45;
-  const curve = (a, b) => { const x1 = a.x + W, y1 = a.y + PY, x2 = b.x, y2 = b.y + PY, dx = Math.max(50, Math.abs(x2 - x1) / 2); return `M${x1} ${y1} C${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`; };
-  const edges = main.slice(1).map((id, i) => `<path d="${curve(pos[main[i]], pos[id])}" class="wf-e"></path>`);
+  const curve = (a, b) => {
+    if (!a || !b) return "";
+    const x1 = a.x + W, y1 = a.y + PY, x2 = b.x, y2 = b.y + PY, dx = Math.max(50, Math.abs(x2 - x1) / 2);
+    return `M${x1} ${y1} C${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+  };
+  const edges = main.slice(1).map((id, i) => {
+    const d = curve(pos[main[i]], pos[id]);
+    return d ? `<path d="${d}" class="wf-e"></path>` : "";
+  });
   const labels = [];
-  if (pos.editor) {
+  // Nhánh AI chấm → Telegram chỉ khi cả hai khối có trên sơ đồ. TBN (Telegram, không đăng) không có check/publish.
+  if (pos.editor && pos.check) {
     const c = pos.check, e = pos.editor, p = pos.publish;
     edges.push(`<path d="M${c.x + W / 2} ${c.y + 118} C${c.x + W / 2} ${c.y + 200}, ${e.x + W / 2} ${e.y - 60}, ${e.x + W / 2} ${e.y}" class="wf-e warn"></path>`);
-    edges.push(`<path d="M${e.x + W} ${e.y + PY} C${e.x + W + 80} ${e.y + PY}, ${p.x + W / 2} ${p.y + 200}, ${p.x + W / 2} ${p.y + 118}" class="wf-e warn"></path>`);
+    if (p) {
+      edges.push(`<path d="M${e.x + W} ${e.y + PY} C${e.x + W + 80} ${e.y + PY}, ${p.x + W / 2} ${p.y + 200}, ${p.x + W / 2} ${p.y + 118}" class="wf-e warn"></path>`);
+    }
     labels.push(`<span class="wf-l ok" style="left:${c.x + W + 6}px;top:${c.y + 20}px">Đúng</span>`, `<span class="wf-l warn" style="left:${c.x + W / 2 + 8}px;top:${c.y + 150}px">Sai</span>`);
   }
-  if (pos.learn) {
+  if (pos.learn && pos.stats && pos.content) {
     const s = pos.stats, l = pos.learn, c = pos.content;
     edges.push(`<path d="M${s.x + W / 2} ${s.y + 118} C${s.x + W / 2} ${l.y + PY}, ${l.x + W + 60} ${l.y + PY}, ${l.x + W} ${l.y + PY}" class="wf-e loop"></path>`);
     edges.push(`<path d="M${l.x} ${l.y + PY + 20} C${l.x - 400} ${l.y + 150}, ${c.x + W / 2} ${c.y + 330}, ${c.x + W / 2} ${c.y + 118}" class="wf-e loop"></path>`);
     labels.push(`<span class="wf-l ok" style="left:${c.x + 140}px;top:${l.y + 110}px">Vòng học: bài học quay lại khâu chọn &amp; viết content</span>`);
   }
   const nodes = Object.keys(pos).map((id) => {
-    const n = nodeOf(id), [stt, cls] = status(w, id);
-    if (!n) return "";
-    return `<button type="button" class="wf-n${S.sel === id ? " on" : ""}" data-node="${id}" style="left:${pos[id].x}px;top:${pos[id].y}px">
+    const n = nodeOf(id), p = pos[id], [stt, cls] = status(w, id);
+    if (!n || !p) return "";
+    return `<button type="button" class="wf-n${S.sel === id ? " on" : ""}" data-node="${id}" style="left:${p.x}px;top:${p.y}px">
       <span class="wf-h"><span class="wf-c ${G[n.g]}">${n.code}</span><b>${n.title}</b></span>
       <span class="wf-s">${esc(sub(w, id, D))}</span><span class="wf-st ${cls}"><i></i>${esc(stt)}</span>
       <span class="wf-p pin"></span><span class="wf-p out"></span></button>`;
@@ -487,7 +497,7 @@ function inspector(w, D) {
   if (id === "check") body = f("Điều kiện", `<span style="display:flex;gap:8px;align-items:center">Điểm dự đoán ≥ <input class="in mono" type="number" min="0" max="100" data-k="check.threshold" value="${w.check.threshold}" style="width:80px"></span>`,
     "Điểm dự đoán = điểm trung bình các video cùng tuyến trên kênh (cần ≥ 3 video có số liệu, chưa đủ thì tính là Sai)")
     + f("Đúng", '<span class="small">Lên lịch đăng ngay theo giờ từng kênh</span>') + f("Sai", `<span class="small">${on(w, "editor") ? "Chờ Editor duyệt" : "Vẫn lên lịch (khối Editor duyệt đang tắt)"}</span>`);
-  if (id === "editor") body = f("Telegram", `<label class="small"><input type="checkbox" class="chk" data-b="editor.telegram" ${w.editor.telegram ? "checked" : ""}> Gửi video vào nhóm khi HD xong</label>`, "Không đăng MXH. File > 50 MB Telegram từ chối.");
+  if (id === "editor") body = f("Telegram", `<label class="small"><input type="checkbox" class="chk" data-b="editor.telegram" ${w.editor?.telegram ? "checked" : ""}> Gửi video vào nhóm khi HD xong</label>`, "Không đăng MXH, không lên Facebook / Instagram / TikTok. File > 50 MB Telegram từ chối.");
   if (id === "publish") {
     const chs = D.channels.filter((c) => !S.chq || c.name.toLowerCase().includes(S.chq.toLowerCase()));
     body = f("Đăng lên", `<span class="wf-chips"><button type="button" class="wf-chip" aria-pressed="${w.publish.target === "market"}" data-target="market">Mọi kênh cùng ngôn ngữ</button><button type="button" class="wf-chip" aria-pressed="${w.publish.target === "channels"}" data-target="channels">Chọn kênh</button></span>`,
@@ -532,6 +542,10 @@ export async function render(view, ctx) {
     w = JSON.parse(JSON.stringify(cur));
     w.lang = w.lang || (w.translate?.langs && w.translate.langs[0]) || "vi";
     w.content.families = [(w.content.families || ["A4"])[0] || "A4"];
+    w.editor = { on: false, telegram: false, ...(w.editor || {}) };
+    w.publish = { on: false, target: "channels", channels: [], approve_pass: "auto", ...(w.publish || {}) };
+    w.stats = { on: false, ...(w.stats || {}) };
+    if (!on(w, S.sel)) S.sel = on(w, "editor") ? "editor" : "content";
   };
   pick();
   const header = () => `<header class="ph-bar"><h1>Workflow</h1>
@@ -687,22 +701,19 @@ export async function render(view, ctx) {
           w.publish.on = false; w.editor.on = false; w.editor.telegram = false;
           dirty = true;
         } else if (id === "editor") {
-          w.editor.on = !has;
-          w.editor.telegram = !has;
+          w.editor = { ...(w.editor || {}), on: !has, telegram: !has };
           dirty = true;
         } else if (id === "publish" || id === "post") {
           w.publish.on = !has;
           dirty = true;
         } else if (id === "check") {
-          if (!has) { w.publish.on = true; w.check.on = true; }
-          else w.check.on = false;
+          w.check.on = !has;
           dirty = true;
         } else if (id === "stats") {
-          w.publish.on = !has;
+          w.stats = { ...(w.stats || {}), on: !has };
           dirty = true;
         } else if (id === "learn") {
           w.learn.on = !has;
-          if (!has) w.publish.on = true;
           dirty = true;
         } else if (!NODES[id]) {
           w.block_on = { ...(w.block_on || {}), [id]: !has };
