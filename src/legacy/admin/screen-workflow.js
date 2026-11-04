@@ -150,11 +150,21 @@ function itemKey(b) {
   return NODES[b.role] ? b.role : b.id;
 }
 
-function pickGroupHtml(name, list, selected, gid) {
+function tgGroupChipsHtml(groups, cur, on) {
+  const gs = groups.length ? groups : [{ id: "vn", label: "VN" }, { id: "tbn", label: "TBN" }];
+  const sel = cur || "vn";
+  return `<div class="wf-tg-pick" ${on ? "" : "hidden"}>
+      <span class="small muted">Gửi vào nhóm</span>
+      <span class="wf-chips">${gs.map((g) => `<label class="wf-chip"><input type="radio" name="wf-tg-group" value="${esc(g.id)}" ${g.id === sel ? "checked" : ""}> ${esc(g.label)}</label>`).join("")}</span>
+    </div>`;
+}
+
+function pickGroupHtml(name, list, selected, gid, groups, curGroup) {
   const items = list.map(([id, l]) => {
     const core = itemCore(id);
     const chk = core || selected.has(id);
-    return `<label class="small wf-pick-i"><input type="checkbox" data-nid="${esc(id)}" ${chk ? "checked" : ""} ${core ? "disabled" : ""}> ${esc(l)}${core ? " · bắt buộc" : ""}</label>`;
+    const extra = id === "editor" ? tgGroupChipsHtml(groups || [], curGroup, chk) : "";
+    return `<label class="small wf-pick-i"><input type="checkbox" data-nid="${esc(id)}" ${chk ? "checked" : ""} ${core ? "disabled" : ""}> ${esc(l)}${core ? " · bắt buộc" : ""}</label>${extra}`;
   }).join("");
   return `<div class="wf-pick-g" data-open="1"${gid ? ` data-gid="${esc(gid)}"` : ""}>
       <div class="wf-pick-h">
@@ -177,6 +187,8 @@ function bindPick(wrap, { onYes }) {
     gc.disabled = false;
     gc.checked = n === boxes.length;
     gc.indeterminate = n > 0 && n < boxes.length;
+    const tg = g.querySelector(".wf-tg-pick");
+    if (tg) tg.hidden = !g.querySelector("[data-nid='editor']")?.checked;
   };
   wrap.querySelectorAll(".wf-pick-g").forEach(sync);
   wrap.addEventListener("change", (e) => {
@@ -239,10 +251,19 @@ function bindPick(wrap, { onYes }) {
   });
 }
 
-function newWorkflowPopup(host, defaultName, palette) {
+function guessTgGroup(name, groups) {
+  const n = (name || "").toLowerCase();
+  const gs = groups || [];
+  if (/\btbn\b|\bes\b|tây ban|tay ban|spain/.test(n) && gs.some((g) => g.id === "tbn")) return "tbn";
+  if (/\bvn\b|\bvi\b|việt/.test(n) && gs.some((g) => g.id === "vn")) return "vn";
+  return gs[0]?.id || "vn";
+}
+
+function newWorkflowPopup(host, defaultName, palette, telegramGroups) {
   const groups = palette?.length ? palette : PALETTE;
   const preset = new Set(["footage", "g2"]);
-  const groupHtml = groups.map(([name, , list]) => pickGroupHtml(name, list, preset, "")).join("");
+  const gs = telegramGroups || [];
+  const groupHtml = groups.map(([name, , list]) => pickGroupHtml(name, list, preset, "", gs, guessTgGroup(defaultName, gs))).join("");
   return new Promise((resolve) => {
     const wrap = document.createElement("div");
     wrap.innerHTML = `<div class="scrim" data-no></div>
@@ -260,7 +281,10 @@ function newWorkflowPopup(host, defaultName, palette) {
       onYes: (node) => {
         if (!node) { resolve(null); return; }
         const ids = [...node.querySelectorAll("[data-nid]")].filter((x) => x.checked).map((x) => x.dataset.nid);
-        resolve({ name: (node.querySelector("#wf-new-name").value || defaultName).trim().slice(0, 60), ids });
+        const telegram_group = ids.includes("editor")
+          ? (node.querySelector("[name=wf-tg-group]:checked")?.value || guessTgGroup(node.querySelector("#wf-new-name")?.value, gs))
+          : "";
+        resolve({ name: (node.querySelector("#wf-new-name").value || defaultName).trim().slice(0, 60), ids, telegram_group });
         node.remove();
       },
     });
@@ -269,9 +293,10 @@ function newWorkflowPopup(host, defaultName, palette) {
   });
 }
 
-function editPalettePopup(host, palette, selected) {
+function editPalettePopup(host, palette, selected, telegramGroups, curGroup) {
   const groups = palette?.length ? palette : PALETTE;
-  const groupHtml = groups.map(([name, , list, gid]) => pickGroupHtml(name, list, selected, gid || "")).join("");
+  const gs = telegramGroups || [];
+  const groupHtml = groups.map(([name, , list, gid]) => pickGroupHtml(name, list, selected, gid || "", gs, curGroup)).join("");
   return new Promise((resolve) => {
     const wrap = document.createElement("div");
     wrap.innerHTML = `<div class="scrim" data-no></div>
@@ -304,8 +329,11 @@ function editPalettePopup(host, palette, selected) {
           title: (card.querySelector("[data-gt]")?.value || "").trim(),
           items: readDraftItems(card.querySelector("[data-items]")),
         })).filter((g) => g.title);
+        const telegram_group = ids.includes("editor")
+          ? (node.querySelector("[name=wf-tg-group]:checked")?.value || "")
+          : "";
         node.remove();
-        resolve({ ids, extra, groups: groupsNew });
+        resolve({ ids, extra, groups: groupsNew, telegram_group });
       },
     });
     host.append(wrap);
@@ -348,6 +376,11 @@ function workflowFromPicks(picks) {
     block_on: {},
   };
   applyPicksToWorkflow(w, ids);
+  if (picks.telegram_group && w.editor?.on) {
+    w.editor.telegram_group = picks.telegram_group;
+    if (picks.telegram_group === "tbn" || picks.telegram_group === "es") w.lang = "es";
+    else if (picks.telegram_group === "vn") w.lang = "vi";
+  }
   return w;
 }
 
@@ -692,7 +725,7 @@ export async function render(view, ctx) {
     if (!t) return;
     try {
       if (t.hasAttribute("data-new")) {
-        const picks = await newWorkflowPopup(el, `Workflow ${D.workflows.length + 1}`, paletteOf());
+        const picks = await newWorkflowPopup(el, `Workflow ${D.workflows.length + 1}`, paletteOf(), tgGroups(D));
         if (!picks) return;
         const r = await api.workflowSave(null, workflowFromPicks(picks));
         S.wid = r.id; await reloadAll(); toast("Đã tạo workflow"); return;
@@ -701,7 +734,7 @@ export async function render(view, ctx) {
         if (!w) return;
         const selected = new Set();
         for (const [, , list] of paletteOf()) for (const [id] of list) if (on(w, id)) selected.add(id);
-        const edits = await editPalettePopup(el, paletteOf(), selected);
+        const edits = await editPalettePopup(el, paletteOf(), selected, tgGroups(D), tgGroupOf(w));
         if (!edits) return;
         const ids = [...edits.ids];
         for (const row of edits.extra || []) {
@@ -717,6 +750,7 @@ export async function render(view, ctx) {
         D.blocks = B.blocks;
         S.cat = catalog(D);
         applyPicksToWorkflow(w, ids);
+        if (ids.includes("editor") && edits.telegram_group) w.editor.telegram_group = edits.telegram_group;
         dirty = true;
         paint();
         toast("Đã sửa khối — nhớ Lưu workflow");
