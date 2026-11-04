@@ -170,6 +170,9 @@ button.stepchip:disabled { cursor: default; opacity: .55; }
 /* jobs kanban */
 .autostrip { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; }
 .autostrip .vsep { width: 1px; height: 22px; background: var(--line); }
+.autostacks { display: grid; gap: 8px; }
+.autostacks .autostrip { margin: 0; }
+.autostrip-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 0 4px 4px; }
 .kanban { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; align-items: start; }
 .kcol { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
 .kcol > header { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px; flex: none; position: sticky; top: 0; background: var(--bg); z-index: 1; }

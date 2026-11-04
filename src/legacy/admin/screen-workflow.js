@@ -639,6 +639,10 @@ export async function render(view, ctx) {
   const pick = () => {
     S.cat = catalog(D);
     if (!D.workflows.length) { w = null; return; }
+    try {
+      const saved = sessionStorage.getItem("vcb_wid");
+      if (saved && D.workflows.some((x) => x.id === saved)) S.wid = saved;
+    } catch {}
     const cur = D.workflows.find((x) => x.id === S.wid) || D.workflows[0];
     S.wid = cur.id;
     w = JSON.parse(JSON.stringify(cur));
@@ -866,7 +870,8 @@ export async function render(view, ctx) {
         const ok = await askPopup(el, { title: "Chưa lưu", text: "Bỏ thay đổi chưa lưu để chuyển workflow khác?", ok: "Bỏ thay đổi" });
         if (!ok) { t.value = S.wid; return; }
       }
-      S.wid = t.value; pick(); dirty = false; paint(); return;
+      S.wid = t.value; try { sessionStorage.setItem("vcb_wid", S.wid); } catch {}
+      pick(); dirty = false; paint(); return;
     }
     if (t.dataset.k) {
       let v = t.value;

@@ -381,26 +381,44 @@ function nextRun(s) {
 }
 
 function autostrip(auto) {
-  const s = auto.schedules[0];
-  if (!s) {
-    return `<section class="box autostrip" aria-label="Lịch tự động"><strong>Tự động</strong><span class="muted">Tắt · chưa dựng video nào</span><div style="flex:1"></div>
+  const wfs = auto.workflows || [];
+  const bySid = Object.fromEntries(wfs.filter((w) => w.schedule_id).map((w) => [w.schedule_id, w]));
+  if (!auto.schedules.length) {
+    return `<section class="box autostrip" aria-label="Lịch tự động"><strong>Tự động</strong><span class="muted">Chưa có workflow / lịch</span><div style="flex:1"></div>
+      <a class="btn" href="#/workflow">Mở Workflow</a>
       <button class="btn" type="button" data-open-plan="">Tạo lịch</button></section>`;
   }
-  const running = auto.running.length;
-  return `<section class="box autostrip" aria-label="Lịch tự động">
-    <button class="switch" type="button" role="switch" aria-checked="${s.enabled}" aria-label="Bật lịch tự động" data-flip="${esc(s.id)}"></button>
-    <strong>${esc(s.name)}</strong><span class="vsep"></span>
-    <span class="muted">${esc(s.times.join(", ") || "chưa đặt giờ")} · ${s.days.length === 7 ? "hằng ngày" : s.days.map((d) => DAYS[d]).join(" ")}</span>
-    <span>${s.count} video${(s.langs || ["vi"]).length > 1 ? ` × ${s.langs.length}` : ""}</span>
-    <span class="mono small">${(s.langs || ["vi"]).map((l) => l.toUpperCase()).join(" · ")}</span>
-    <span style="display:flex;gap:4px">${s.families.map((f) => `<span class="fam ${f}">${f}</span>`).join("")}</span>
-    <span class="muted">${esc(s.topics.length ? s.topics.slice(0, 2).join(", ") + (s.topics.length > 2 ? "…" : "") : "mọi chủ đề")}</span>
-    <div style="flex:1"></div>
-    ${running ? `<span class="chip run">Đang chạy ${running} lượt</span>` : nextRun(s) ? `<span class="muted small">Lần tới · <span class="mono">${esc(nextRun(s))}</span></span>` : ""}
-    ${auto.schedules.length > 1 ? `<span class="chip">${auto.schedules.length} lịch</span>` : ""}
-    <button class="btn sm" type="button" data-open-plan="${esc(s.id)}">Sửa lịch</button>
-    <button class="btn sm" type="button" data-stop-auto>Dừng & xoá job</button>
-    <button class="btn sm ink" type="button" data-srun="${esc(s.id)}">Chạy ngay</button></section>`;
+  const runningBy = {};
+  for (const r of auto.running || []) {
+    const sid = r.schedule_id || "";
+    runningBy[sid] = (runningBy[sid] || 0) + 1;
+  }
+  const row = (s) => {
+    const w = bySid[s.id];
+    const lang = ((w && w.lang) || (s.langs || ["vi"])[0] || "vi").toUpperCase();
+    const tg = w?.telegram ? (w.telegram_group || "telegram").toUpperCase() : "";
+    const title = w ? w.name : s.name.replace(/^Workflow · /, "");
+    const runN = runningBy[s.id] || 0;
+    return `<section class="box autostrip" aria-label="${esc(title)}">
+      <button class="switch" type="button" role="switch" aria-checked="${s.enabled}" aria-label="Bật ${esc(title)}" data-flip="${esc(s.id)}"></button>
+      <strong>${esc(title)}</strong>
+      ${w ? `<span class="chip">${w.enabled ? "Workflow" : "Workflow · tắt"}</span>` : `<span class="chip">Lịch</span>`}
+      <span class="chip mono">${esc(lang)}</span>
+      ${tg ? `<span class="chip" title="Nhóm Telegram">TG ${esc(tg)}</span>` : ""}
+      <span class="vsep"></span>
+      <span class="muted">${esc(s.times.join(", ") || "chưa đặt giờ")} · ${s.days.length === 7 ? "hằng ngày" : s.days.map((d) => DAYS[d]).join(" ")}</span>
+      <span>${s.count} video</span>
+      <span style="display:flex;gap:4px">${(s.families || []).map((f) => `<span class="fam ${f}">${f}</span>`).join("")}</span>
+      <span class="muted">${esc(s.topics.length ? s.topics.slice(0, 2).join(", ") + (s.topics.length > 2 ? "…" : "") : "mọi chủ đề")}</span>
+      <div style="flex:1"></div>
+      ${runN ? `<span class="chip run">Đang chạy</span>` : nextRun(s) ? `<span class="muted small">Lần tới · <span class="mono">${esc(nextRun(s))}</span></span>` : ""}
+      ${w ? `<a class="btn sm" href="#/workflow" data-gowf="${esc(w.id)}">Sửa workflow</a>` : ""}
+      <button class="btn sm" type="button" data-open-plan="${esc(s.id)}">Sửa lịch</button>
+      <button class="btn sm ink" type="button" data-srun="${esc(s.id)}">Chạy ngay</button></section>`;
+  };
+  return `<div class="autostacks" aria-label="Workflow và lịch tự động">${auto.schedules.map(row).join("")}
+    <div class="autostrip-foot"><button class="btn sm" type="button" data-stop-auto>Dừng & xoá job</button>
+      <a class="btn sm" href="#/workflow">+ Workflow</a></div></div>`;
 }
 
 const STAGES = [["content", "Kịch bản"], ["plan", "Timeline · voice"], ["render", "Dựng HD"], ["done", "Xuất file"]];
@@ -772,6 +790,8 @@ export async function render(view, ctx) {
     if (e.target.dataset.sel) { e.target.checked ? selected.add(e.target.dataset.sel) : selected.delete(e.target.dataset.sel); $("#bulk").innerHTML = bulkbar(); }
   });
   el.addEventListener("click", async (e) => {
+    const go = e.target.closest("[data-gowf]");
+    if (go) { try { sessionStorage.setItem("vcb_wid", go.dataset.gowf); } catch {} }
     const b = e.target.closest("button, [data-close]");
     if (!b) return;
     try {
