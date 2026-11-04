@@ -251,6 +251,33 @@ function bindPick(wrap, { onYes }) {
   });
 }
 
+function parseTimes(s) {
+  return String(s || "").split(/[,;]+/).map((x) => x.trim()).filter(Boolean).map((x) => {
+    const m = x.match(/^(\d{1,2})(?::(\d{2}))?$/);
+    if (!m) return null;
+    const h = Math.min(23, Math.max(0, +m[1]));
+    const min = Math.min(59, Math.max(0, +(m[2] || 0)));
+    return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+  }).filter(Boolean);
+}
+function scheduleHtml(times, days) {
+  const t = (times && times.length ? times : ["08:00"]).join(", ");
+  const ds = new Set((days && days.length ? days : [0, 1, 2, 3, 4, 5, 6]).map(Number));
+  return `<div class="wf-sched">
+      <label class="small">Giờ chạy hằng ngày
+        <input class="in mono" id="wf-times" value="${esc(t)}" placeholder="08:00, 14:00, 20:00" style="margin-top:4px">
+      </label>
+      <span class="small muted">Nhiều giờ cách nhau dấu phẩy. Bật workflow thì chạy đúng các giờ này vào ngày đã chọn.</span>
+      <span class="small lbl">Ngày trong tuần</span>
+      <span class="wf-chips">${DAYS.map((d, i) => `<label class="wf-chip"><input type="checkbox" data-wday="${i}" ${ds.has(i) ? "checked" : ""}> ${d}</label>`).join("")}</span>
+    </div>`;
+}
+function readSchedule(node) {
+  const times = parseTimes(node.querySelector("#wf-times")?.value);
+  const days = [...node.querySelectorAll("[data-wday]:checked")].map((x) => +x.dataset.wday).sort((a, b) => a - b);
+  return { times: times.length ? times : ["08:00"], days: days.length ? days : [0, 1, 2, 3, 4, 5, 6] };
+}
+
 function guessTgGroup(name, groups) {
   const n = (name || "").toLowerCase();
   const gs = groups || [];
@@ -270,6 +297,7 @@ function newWorkflowPopup(host, defaultName, palette, telegramGroups) {
       <div class="box pad xmodal wide" role="dialog" aria-modal="true">
         <b>Workflow mới</b>
         <label class="small">Tên<input class="in" id="wf-new-name" value="${esc(defaultName)}" style="margin-top:4px"></label>
+        ${scheduleHtml(["08:00"], [0, 1, 2, 3, 4, 5, 6])}
         <span class="small muted">Mở khối để tick từng mục. Tick khối = tick hết mục trong khối; vẫn có thể bỏ từng mục.</span>
         <div class="wf-pick">${groupHtml}</div>
         <div class="ge-actions">
@@ -284,7 +312,7 @@ function newWorkflowPopup(host, defaultName, palette, telegramGroups) {
         const telegram_group = ids.includes("editor")
           ? (node.querySelector("[name=wf-tg-group]:checked")?.value || guessTgGroup(node.querySelector("#wf-new-name")?.value, gs))
           : "";
-        resolve({ name: (node.querySelector("#wf-new-name").value || defaultName).trim().slice(0, 60), ids, telegram_group });
+        resolve({ name: (node.querySelector("#wf-new-name").value || defaultName).trim().slice(0, 60), ids, telegram_group, ...readSchedule(node) });
         node.remove();
       },
     });
@@ -293,16 +321,19 @@ function newWorkflowPopup(host, defaultName, palette, telegramGroups) {
   });
 }
 
-function editPalettePopup(host, palette, selected, telegramGroups, curGroup) {
+function editPalettePopup(host, palette, selected, telegramGroups, curGroup, wf) {
   const groups = palette?.length ? palette : PALETTE;
   const gs = telegramGroups || [];
   const groupHtml = groups.map(([name, , list, gid]) => pickGroupHtml(name, list, selected, gid || "", gs, curGroup)).join("");
+  const name = (wf?.name || "").trim();
   return new Promise((resolve) => {
     const wrap = document.createElement("div");
     wrap.innerHTML = `<div class="scrim" data-no></div>
       <div class="box pad xmodal wide" role="dialog" aria-modal="true">
-        <b>Sửa khối</b>
-        <span class="small muted">Tick để chọn lại mục trên rail trái. Cộng cạnh khối để thêm mục; cộng cạnh tên khối mới để thêm khối.</span>
+        <b>Sửa workflow</b>
+        <label class="small">Tên<input class="in" id="wf-new-name" value="${esc(name)}" style="margin-top:4px"></label>
+        ${scheduleHtml(wf?.trigger?.times, wf?.trigger?.days)}
+        <span class="small muted">Tick khối để dùng trên sơ đồ. Có thể thêm mục/khối mới bên dưới.</span>
         <div class="wf-pick">${groupHtml}
           <div class="ge-title">
             <span class="small muted" style="flex:1">Thêm khối mới</span>
@@ -312,7 +343,7 @@ function editPalettePopup(host, palette, selected, telegramGroups, curGroup) {
         </div>
         <div class="ge-actions">
           <button class="btn" type="button" data-no>Huỷ</button>
-          <button class="btn pri" type="button" data-yes>Lưu khối</button>
+          <button class="btn pri" type="button" data-yes>Lưu</button>
         </div>
       </div>`;
     bindPick(wrap, {
@@ -332,8 +363,11 @@ function editPalettePopup(host, palette, selected, telegramGroups, curGroup) {
         const telegram_group = ids.includes("editor")
           ? (node.querySelector("[name=wf-tg-group]:checked")?.value || "")
           : "";
+        const payload = { ids, extra, groups: groupsNew, telegram_group,
+          name: (node.querySelector("#wf-new-name")?.value || name).trim().slice(0, 60),
+          ...readSchedule(node) };
         node.remove();
-        resolve({ ids, extra, groups: groupsNew, telegram_group });
+        resolve(payload);
       },
     });
     host.append(wrap);
@@ -364,7 +398,7 @@ function workflowFromPicks(picks) {
   const w = {
     name: picks.name || "Workflow mới",
     enabled: false,
-    trigger: { times: ["08:00"], days: [0, 1, 2, 3, 4, 5, 6] },
+    trigger: { times: picks.times?.length ? picks.times : ["08:00"], days: picks.days?.length ? picks.days : [0, 1, 2, 3, 4, 5, 6] },
     content: { count: 5, families: ["A1"], topics: [], mode: "mix", skus: [] },
     lang: "vi", voice: "", music_track: "", a4_line: false, a4_plan: null,
     build: { auto_render: true, hook_text: false },
@@ -642,7 +676,7 @@ export async function render(view, ctx) {
         <button class="btn sm" type="button" data-edit-pal>Sửa</button>
       </div>
       ${groups}
-      <p class="small muted" style="margin:4px 2px 0;line-height:1.5">✓ đang làm · ô trống = chưa dùng. Sửa = chọn lại hoặc thêm khối/mục mới.</p></aside>`;
+      <p class="small muted" style="margin:4px 2px 0;line-height:1.5">✓ đang làm · ô trống = chưa dùng. Sửa = khối, nhóm Telegram và giờ chạy hằng ngày.</p></aside>`;
   };
   const paint = () => {
     if (!w) {
@@ -734,7 +768,7 @@ export async function render(view, ctx) {
         if (!w) return;
         const selected = new Set();
         for (const [, , list] of paletteOf()) for (const [id] of list) if (on(w, id)) selected.add(id);
-        const edits = await editPalettePopup(el, paletteOf(), selected, tgGroups(D), tgGroupOf(w));
+        const edits = await editPalettePopup(el, paletteOf(), selected, tgGroups(D), tgGroupOf(w), w);
         if (!edits) return;
         const ids = [...edits.ids];
         for (const row of edits.extra || []) {
@@ -751,9 +785,11 @@ export async function render(view, ctx) {
         S.cat = catalog(D);
         applyPicksToWorkflow(w, ids);
         if (ids.includes("editor") && edits.telegram_group) w.editor.telegram_group = edits.telegram_group;
+        if (edits.name) w.name = edits.name;
+        if (edits.times) w.trigger = { ...(w.trigger || {}), times: edits.times, days: edits.days };
         dirty = true;
         paint();
-        toast("Đã sửa khối — nhớ Lưu workflow");
+        toast("Đã sửa workflow — nhớ Lưu");
         return;
       }
       if (t.dataset.view) { S.view = t.dataset.view; paint(); return; }
