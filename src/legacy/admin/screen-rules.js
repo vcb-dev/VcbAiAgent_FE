@@ -25,8 +25,17 @@ function cellsOf(line) {
   return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 }
 
+function prepMd(text) {
+  return String(text || "").replace(/\r\n/g, "\n").replace(/[^\n]+/g, (line) => {
+    if (/\|-{2,}\|/.test(line) && line.length > 80) {
+      return line.replace(/\s*(\|(?:-{2,}\|)+)\s*/g, "\n$1\n");
+    }
+    return line;
+  });
+}
+
 function blocksOf(text) {
-  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const lines = prepMd(text).split("\n");
   const out = [];
   let i = 0;
   const flushP = (buf) => {
