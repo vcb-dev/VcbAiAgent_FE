@@ -11,6 +11,7 @@ const SCREENS = {
   social: () => import("./screen-social.js"),
   workflow: () => import("./screen-workflow.js"),
   fx: () => import("./screen-fx.js"),
+  rules: () => import("./screen-rules.js"),
   ai: () => import("./screen-ai.js"),
   more: () => import("./screen-more.js"),
   inventory: () => import("./screen-inventory.js"),

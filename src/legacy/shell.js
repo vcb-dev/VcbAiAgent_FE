@@ -14,6 +14,7 @@ const ICONS = {
   social: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/><path d="M15 6l3-3 3 3M18 3v6"/>',
   workflow: '<rect x="3" y="4" width="6" height="5" rx="1.5"/><rect x="15" y="15" width="6" height="5" rx="1.5"/><path d="M9 6.5h4a2 2 0 0 1 2 2v6.5"/>',
   fx: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  rules: '<path d="M8 4h10a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M6 8H4a1 1 0 0 0-1 1v11"/><path d="M11 9h6M11 13h6M11 17h4"/>',
   ai: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
   inventory: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
   research: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/><path d="M8.5 11.5l1.8-2 1.6 1.8 1.8-2.3"/>',
@@ -23,7 +24,7 @@ const ICONS = {
 };
 const ITEMS = [
   ["studio", "Studio", "/"], ["content", "Kho content", "/admin#/content"], ["footage", "Kho footage", "/admin#/footage"],
-  ["jobs", "Job · tự động", "/admin#/jobs"], ["review", "Duyệt", "/admin#/review"], ["exports", "Đã xuất", "/admin#/exports"], ["inventory", "Kho hàng", "/admin#/inventory"], ["social", "Đăng & hiệu quả", "/admin#/social"], ["research", "Nghiên cứu đối thủ", "/admin#/research"], ["workflow", "Workflow", "/admin#/workflow"], ["fx", "FX · template · nhạc", "/admin#/fx"],
+  ["jobs", "Job · tự động", "/admin#/jobs"], ["review", "Duyệt", "/admin#/review"], ["exports", "Đã xuất", "/admin#/exports"], ["inventory", "Kho hàng", "/admin#/inventory"], ["social", "Đăng & hiệu quả", "/admin#/social"], ["research", "Nghiên cứu đối thủ", "/admin#/research"], ["workflow", "Workflow", "/admin#/workflow"], ["fx", "FX · template · nhạc", "/admin#/fx"], ["rules", "Cấu hình quy tắc", "/admin#/rules"],
 ];
 const svg = (name) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 

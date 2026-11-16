@@ -147,6 +147,12 @@ export const api = {
   automationCancel: () => call("/api/automation/cancel", { method: "POST" }),
   tagDecision: (clipId, body) => call(`/api/review/tags/${encodeURIComponent(clipId)}`, { method: "POST", body: JSON.stringify(body) }),
   setClipStep: (clipId, craft_step) => call(`/api/clips/${encodeURIComponent(clipId)}/craft-step`, { method: "POST", body: JSON.stringify({ craft_step }) }),
+  setClipFolder: (clipId, body) => call(`/api/clips/${encodeURIComponent(clipId)}/folder`, { method: "POST", body: JSON.stringify(body) }),
+  emptyFolders: (sku, origin) => call(`/api/library/empty-folders?sku=${encodeURIComponent(sku || "")}&origin=${encodeURIComponent(origin || "")}`),
+  saveEmptyFolders: (sku, origin, folders) => call("/api/library/empty-folders", { method: "PUT", body: JSON.stringify({ sku, origin, folders }) }),
+  rules: () => call("/api/rules"),
+  saveA4Rules: (built_in) => call("/api/rules/a4", { method: "PUT", body: JSON.stringify({ built_in }) }),
+  saveContentRules: (docs) => call("/api/rules/content", { method: "PUT", body: JSON.stringify({ docs }) }),
 };
 
 export const STATE = {

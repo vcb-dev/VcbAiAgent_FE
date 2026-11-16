@@ -36,6 +36,7 @@ const canSort = () => st.lib === "product" && !!st.sku && isCraftOrigin();
 const isFinished = (c) => c.craft_step === "hoan_thien" || (c.roles?.product_final || 0) >= 0.5;
 let covRef = { rows: [], columns: [] };
 let summaryRef = { huyk: 0, outro: 0, illus: 0, skus: {} };
+let extraFolders = [];
 const SKU_KIND = { N: "nhan", L: "lac_tay", B: "bong_tai", K: "day_chuyen", D: "day_chuyen", O: "bong_tai" };
 const skuKind = (sku) => SKU_KIND[String(sku || "").trim().charAt(0).toUpperCase()] || "khac";
 const readyRows = () => (covRef.rows || []).filter((r) => r.ready);
@@ -115,11 +116,7 @@ function skuRows(lib, cov) {
   }).map((r) => {
     const of = lib.filter((c) => c.product_set === r.sku);
     const n = of.length || r.clips || 0;
-    const filled = of.length ? CRAFT_UI.filter((s) => of.some((c) => c.craft_step === s)).length : (r.craft_steps || 0);
-    const os = of.length ? originStats(of) : [];
-    const ht = of.filter(isFinished).length;
-    const src = [os.map((o) => `${o.label.split(" ")[0]} ${o.cov}cd`).join(" · "), ht ? `HT ${ht}` : ""].filter(Boolean).join(" · ");
-    return { key: r.sku, label: r.sku, sub: r.name, n, cov: filled, total: CRAFT_UI.length, thumb: of[0]?.thumb || r.thumb, src };
+    return { key: r.sku, label: r.sku, sub: r.name, n, thumb: of[0]?.thumb || r.thumb };
   });
 }
 function stepRows(lib) {
@@ -282,14 +279,13 @@ function sideList(lib, gs) {
     const rows = gs.map((g) => `<button type="button" class="lrow${g.n ? "" : " empty"}" data-origin="${esc(g.key)}">
       <span class="ic">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}</span>
       <span class="bd"><span class="t1"><b>${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
-        <span class="muted small">${g.total ? `${g.cov}/${g.total} công đoạn đã xếp` : esc(g.sub || "")}</span></span></button>`).join("");
+        <span class="muted small">${esc(g.sub || "")}</span></span></button>`).join("");
     return `${back}${rows}`;
   }
   const row = (g) => `<button type="button" class="lrow${(st.lib === "product" ? st.sku : st.group) === g.key ? " on" : ""}${g.n ? "" : " empty"}" data-${st.lib === "product" ? "sku" : "group"}="${esc(g.key)}">
     <span class="ic">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}</span>
     <span class="bd"><span class="t1"><b class="${st.lib === "product" ? "mono" : ""}">${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
-      ${g.total ? `<span class="covbar" aria-label="${g.cov}/${g.total} công đoạn">${Array.from({ length: Math.min(g.total, 8) }, (_, i) => `<i class="${i < Math.round((g.cov / g.total) * Math.min(g.total, 8)) ? "on" : ""}"></i>`).join("")}</span>`
-        : g.sub ? `<span class="muted small">${esc(g.sub)}</span>` : ""}</span></button>`;
+      ${g.sub ? `<span class="muted small">${esc(g.sub)}</span>` : ""}</span></button>`;
   const all = st.lib === "product" ? "" : `<button type="button" class="lrow${!st.group ? " on" : ""}" data-group=""><span class="ic">${ICON}</span><span class="bd"><span class="t1"><b>Tất cả</b></span></span></button>`;
   return `${all}${gs.map(row).join("")}`;
 }
@@ -307,7 +303,7 @@ function mainHead(lib, gs) {
   const meta = (covRef.rows || []).find((r) => r.sku === st.sku);
   if (canSort()) {
     return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <button type="button" class="btn" data-back-origin>← Nguồn</button>
+      <button type="button" class="btn" data-back-origin="1">← Nguồn</button>
       <h2 style="margin:0;font-size:18px;font-weight:700;font-family:var(--mono)">${esc(st.sku)}</h2>
       <span class="muted">${esc(meta?.name || "")}${meta?.name ? " · " : ""}${esc(originLabel(st.origin))}</span></div>`;
   }
@@ -343,27 +339,19 @@ const LB = (c) => (c?.library === "broll" ? "SƯU TẦM" : libOf(c) === "outro" 
 const moreRow = (shown, total) => (total > shown ? `<div class="pager fmore" style="justify-content:center"><span class="muted small">${shown}/${total} · kéo xuống để xem thêm</span></div>` : total > PAGE ? `<div class="pager" style="justify-content:center"><span class="muted small">Đã hiện hết ${total} clip</span></div>` : "");
 
 function skuCard(g) {
-  const n = Math.min(g.total || 0, 8);
-  const on = n ? Math.round((g.cov / g.total) * n) : 0;
   return `<button type="button" class="skucard" data-sku="${esc(g.key)}">
       <span class="tmb">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}
         <span class="tc">${g.n} clip</span></span>
       <span class="skumeta"><b class="mono">${esc(g.label)}</b>
         <span class="muted small">${esc(g.sub || "—")}</span>
-        <span class="muted small">${esc(g.src || `${g.cov}/${g.total} công đoạn`)}</span>
-        <span class="covbar" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<i class="${i < on ? "on" : ""}"></i>`).join("")}</span>
       </span></button>`;
 }
 function originCard(g) {
-  const n = Math.min(g.total || 0, 8);
-  const on = n ? Math.round((g.cov / g.total) * n) : 0;
   return `<button type="button" class="skucard" data-origin="${esc(g.key)}">
       <span class="tmb">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}
         <span class="tc">${g.n} clip</span></span>
       <span class="skumeta"><b>${esc(g.label)}</b>
         <span class="muted small">${esc(g.sub || "")}</span>
-        ${g.total ? `<span class="muted small">${g.cov}/${g.total} công đoạn đã xếp</span>
-        <span class="covbar" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<i class="${i < on ? "on" : ""}"></i>`).join("")}</span>` : ""}
       </span></button>`;
 }
 function boardClips(lib) {
@@ -391,8 +379,15 @@ function stepBoards(clips) {
     if (!by.has(key)) by.set(key, { idx, label, tag: c.craft_step && NEW_SET.has(c.craft_step) ? c.craft_step : "", clips: [] });
     by.get(key).clips.push(c);
   });
+  extraFolders.forEach((f) => {
+    const idx = Number(f.idx) || 999;
+    const label = String(f.label || "").trim();
+    if (!label) return;
+    const key = `${idx}|${label}`;
+    if (!by.has(key)) by.set(key, { idx, label, tag: "", clips: [] });
+  });
   return [...by.values()].sort((a, b) => a.idx - b.idx || a.label.localeCompare(b.label, "vi")).map((row, i) => ({
-    ...row, drop: row.tag || "__unsorted", idx: row.idx === 999 ? i + 1 : row.idx,
+    ...row, drop: row.tag || "__folder", idx: row.idx === 999 ? i + 1 : row.idx,
   }));
 }
 function craftBoard(lib) {
@@ -406,6 +401,8 @@ function craftBoard(lib) {
   const chips = [...shoots.values()].sort((a, b) => b.n - a.n);
   const rows = stepBoards(boardClips(lib));
   const tools = `<div class="ftools">
+      <button type="button" class="btn" data-back-origin="1">← Nguồn</button>
+      <button type="button" class="btn" data-step-add="1">Thêm công đoạn</button>
       <button type="button" class="pill" data-board="index" aria-pressed="${st.board === "index"}">Theo số thứ mục</button>
       <button type="button" class="pill" data-board="tag" aria-pressed="${st.board === "tag"}">Gom theo tag công đoạn</button>
       <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
@@ -419,15 +416,18 @@ function craftBoard(lib) {
     </div>
     <p class="muted small" style="margin:0">Kéo một clip thả vào công đoạn khác để chuyển tag. Kéo ra <b>Chưa xếp</b> nếu xếp nhầm.</p>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
-  const body = rows.map((row) => `<section class="fstep" data-drop-step="${esc(row.drop)}">
+  const body = rows.map((row) => `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.idx}" data-drop-label="${esc(row.label)}">
       <div class="fstep-h">
         <span class="fstep-n">${row.idx}</span>
         <span class="fstep-t"><b>${esc(row.label)}</b>
-          ${row.tag ? `<span class="fstep-tag">${esc(row.tag)}</span>` : ""}
-          <span class="muted small">${esc((STEP_VI[row.tag] && STEP_VI[row.tag] !== row.label ? STEP_VI[row.tag] + " · " : ""))}${row.clips.length} clip</span>
+          <span class="muted small">${row.clips.length} clip</span>
+        </span>
+        <span class="fstep-act">
+          <button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.idx}">Sửa</button>
+          <button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.idx}">Xóa</button>
         </span>
       </div>
-      <div class="fstrip">${row.clips.map((c) => card(c, LB(c))).join("")}</div>
+      <div class="fstrip">${row.clips.length ? row.clips.map((c) => card(c, LB(c))).join("") : `<span class="muted small">Kéo clip vào đây</span>`}</div>
     </section>`).join("");
   return `<div class="fboard">${tools}${body}</div>`;
 }
@@ -519,7 +519,16 @@ export async function render(view, ctx) {
       else if (st.sku) await pull(`sku:${st.sku}`, { sku: st.sku });
     } catch { /* lưới vẫn vẽ từ coverage */ }
     lib = mergeLib();
+    if (st.sku && isCraftOrigin()) {
+      extraFolders = (await api.emptyFolders(st.sku, st.origin).catch(() => ({ folders: [] }))).folders || [];
+    } else extraFolders = [];
   };
+  const persistFolders = async () => {
+    extraFolders = stepBoards(boardClips(lib)).map((r) => ({ idx: r.idx, label: r.label }));
+    try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
+  };
+  const folderClips = (idx, label) => boardClips(lib).filter((c) => Number(c.step_index || 999) === Number(idx)
+    && String(c.step_label || STEP_VI[c.craft_step] || "Chưa xếp") === String(label));
   await fillView();
   const paint = () => {
     covRef = cov || { rows: [], columns: [] };
@@ -576,21 +585,25 @@ export async function render(view, ctx) {
     if (!row || !id || !canSort()) return;
     e.preventDefault();
     const step = row.dataset.dropStep;
+    const idx = Number(row.dataset.dropIdx || 0);
+    const label = row.dataset.dropLabel || (step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step));
     const clip = lib.find((c) => c.id === id);
     if (!clip || clip.product_set !== st.sku || originOf(clip) !== st.origin) { toast("Chỉ kéo clip của đúng mã và nguồn đang mở", true); return; }
-    const was = NEW_SET.has(clip.craft_step) ? clip.craft_step : "__unsorted";
-    if (was === step) return;
-    const prev = clip.craft_step;
-    const prevLabel = clip.step_label;
-    clip.craft_step = step;
-    clip.step_label = step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step);
+    if (Number(clip.step_index || 999) === idx && String(clip.step_label || "") === String(label)) return;
+    const prev = { craft_step: clip.craft_step, step_label: clip.step_label, step_index: clip.step_index };
+    const craft = NEW_SET.has(step) || step === "__unsorted" ? step : undefined;
+    if (craft) clip.craft_step = craft;
+    clip.step_label = label;
+    clip.step_index = idx;
     paint();
     try {
-      await api.setClipStep(id, step);
-      toast(step === "__unsorted" ? "Đã kéo ra Chưa xếp" : `Đã chuyển sang ${STEP_VI[step] || step}`);
+      await api.setClipFolder(id, { step_index: idx, step_label: label, craft_step: craft });
+      await persistFolders();
+      toast(`Đã chuyển sang ${label}`);
     } catch (err) {
-      clip.craft_step = prev;
-      clip.step_label = prevLabel;
+      clip.craft_step = prev.craft_step;
+      clip.step_label = prev.step_label;
+      clip.step_index = prev.step_index;
       paint();
       toast(err.message, true);
     }
@@ -618,11 +631,57 @@ export async function render(view, ctx) {
       st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return;
     }
     if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.hasAttribute("data-back-origin")) { st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.board) { st.board = t.dataset.board; paint(); return; }
     if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
-    if (t.dataset.backOrigin) { st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.hasAttribute("data-step-add")) {
+      const name = (window.prompt("Tên công đoạn mới") || "").trim();
+      if (!name) return;
+      const used = stepBoards(boardClips(lib)).map((r) => Number(r.idx) || 0);
+      const idx = Math.max(0, ...used, ...extraFolders.map((f) => Number(f.idx) || 0)) + 1;
+      extraFolders = [...extraFolders, { idx, label: name }];
+      try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch (err) { toast(err.message, true); }
+      paint();
+      toast(`Đã thêm «${name}»`);
+      return;
+    }
+    if (t.dataset.stepEdit !== undefined) {
+      const old = t.dataset.stepEdit;
+      const idx = Number(t.dataset.stepIdx);
+      const name = (window.prompt("Đổi tên công đoạn", old) || "").trim();
+      if (!name || name === old) return;
+      extraFolders = extraFolders.map((f) => (Number(f.idx) === idx && f.label === old ? { ...f, label: name } : f));
+      try {
+        for (const c of folderClips(idx, old)) {
+          c.step_label = name;
+          c.step_index = idx;
+          await api.setClipFolder(c.id, { step_index: idx, step_label: name });
+        }
+        await persistFolders();
+      } catch (err) { toast(err.message, true); }
+      paint();
+      return;
+    }
+    if (t.dataset.stepDel !== undefined) {
+      const label = t.dataset.stepDel;
+      const idx = Number(t.dataset.stepIdx);
+      if (label === "Chưa xếp") { toast("Không xóa mục Chưa xếp", true); return; }
+      if (!window.confirm(`Xóa mục «${label}»? Clip trong mục sẽ về Chưa xếp.`)) return;
+      try {
+        for (const c of folderClips(idx, label)) {
+          c.craft_step = "__unsorted";
+          c.step_label = "Chưa xếp";
+          c.step_index = 999;
+          await api.setClipFolder(c.id, { step_index: 999, step_label: "Chưa xếp", craft_step: "__unsorted" });
+        }
+        extraFolders = extraFolders.filter((f) => !(Number(f.idx) === idx && f.label === label));
+        await persistFolders();
+      } catch (err) { toast(err.message, true); }
+      paint();
+      return;
+    }
     if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.step !== undefined) { st.step = st.step === t.dataset.step ? "" : t.dataset.step; st.shown = 60; paint(); return; }
