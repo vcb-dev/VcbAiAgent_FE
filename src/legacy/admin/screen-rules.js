@@ -111,8 +111,8 @@ export async function render(view, ctx) {
 
   const goTab = (next) => {
     tab = next;
-    const next = `/rules/${tab}`;
-    if (location.pathname !== next) history.replaceState(null, "", next);
+    const path = `/rules/${tab}`;
+    if (location.pathname !== path) history.replaceState(null, "", path);
     paint();
   };
 
