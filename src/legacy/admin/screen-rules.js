@@ -267,7 +267,7 @@ export async function render(view, ctx) {
   let busy = false;
   let editing = "";
   let docId = (data.content?.docs || [])[0]?.id || "framework";
-  let secAt = shownSecs((data.content?.docs || []).find((d) => d.id === docId) || {}).[0]?.i ?? 0;
+  let secAt = shownSecs((data.content?.docs || []).find((d) => d.id === docId) || {})[0]?.i ?? 0;
   let a4Group = 0;
 
   const paint = () => {
@@ -308,7 +308,7 @@ export async function render(view, ctx) {
     if (docBtn) {
       stashContent(el, data.content);
       docId = docBtn.dataset.docid;
-      secAt = shownSecs((data.content?.docs || []).find((d) => d.id === docId) || {}).[0]?.i ?? 0;
+      secAt = shownSecs((data.content?.docs || []).find((d) => d.id === docId) || {})[0]?.i ?? 0;
       editing = "";
       paint();
       return;
