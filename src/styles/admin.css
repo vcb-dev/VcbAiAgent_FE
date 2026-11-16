@@ -1061,22 +1061,48 @@ button.tline { cursor: pointer; } button.tline.on { background: var(--accent-sof
 @media (max-width: 700px) { .wsrc { flex-wrap: wrap; } }
 
 /* Cấu hình quy tắc */
-.rule-page { max-width: 880px; }
-.rule-g { display: flex; flex-direction: column; gap: 10px; }
-.rule-g h2 { margin: 8px 0 0; font-size: 15px; }
-.rule-card { background: var(--pane); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.rule-page { max-width: 980px; }
+.rule-lead { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.rule-g { display: flex; flex-direction: column; gap: 12px; }
+.rule-g h2 { margin: 8px 0 0; font-size: 16px; }
+.rule-docs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rule-doc { text-align: left; cursor: pointer; border: 1px solid var(--line); background: var(--pane); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-height: 72px; }
+.rule-doc:hover { background: var(--pane-2); }
+.rule-doc.on { border-color: var(--accent); background: var(--active-bg); box-shadow: 0 0 0 1px var(--accent); }
+.rule-doc b { font-size: 13.5px; color: var(--ink); }
+.rule-doc span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.rule-card { background: var(--pane); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
 .rule-card.off { opacity: .62; }
 .rule-hd { display: flex; gap: 12px; align-items: flex-start; }
 .rule-hd .grow { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.rule-hd b { font-size: 14px; }
+.rule-hd b { font-size: 15px; line-height: 1.35; }
 .rule-hd code { font-size: 11px; }
+.rule-num { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font: 700 12px var(--sans); color: var(--accent-ink); background: var(--accent); }
 .rtgl { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 28px; font-weight: 600; font-size: 12px; color: var(--muted); }
 .rtgl input { width: 16px; height: 16px; accent-color: var(--accent); }
-.rule-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.rule-note { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
 .rule-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; }
 .rule-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rule-f span { font-size: 12px; color: var(--muted); }
 .rule-f .in, .rule-check { width: 100%; }
 .rule-check { display: flex; gap: 8px; align-items: center; min-height: 34px; font-size: 13px; }
-.rule-md { min-height: 140px; font: 13px/1.55 var(--sans); resize: vertical; }
+.rule-md { min-height: 160px; font: 14px/1.6 var(--sans); resize: vertical; }
 .rule-card.off .rule-fields { pointer-events: none; }
+.rule-read .rule-p, .rule-read .rule-list, .rule-read .rule-q { margin: 0; font-size: 15px; line-height: 1.7; color: var(--ink); }
+.rule-read .rule-p + .rule-p, .rule-read .rule-list + .rule-p, .rule-read .rule-p + .rule-list { margin-top: 8px; }
+.rule-read .rule-sh { margin: 12px 0 6px; font-size: 13.5px; }
+.rule-read .rule-list { padding-left: 1.25em; display: flex; flex-direction: column; gap: 6px; }
+.rule-read .rule-list li { padding-left: 2px; }
+.rule-read strong { font-weight: 650; color: var(--ink); }
+.rule-q { margin: 8px 0 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; }
+.rule-q p { margin: 0 0 4px; font-size: 15px; line-height: 1.65; }
+.rule-q p:last-child { margin: 0; }
+.rule-table-wrap { overflow-x: auto; margin: 4px 0 2px; border: 1px solid var(--line); border-radius: 10px; }
+.rule-table { width: 100%; border-collapse: collapse; min-width: 520px; font-size: 13.5px; line-height: 1.5; }
+.rule-table th { text-align: left; padding: 10px 12px; background: var(--pane-2); color: var(--ink); font-weight: 650; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.rule-table td { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top; color: var(--ink); }
+.rule-table tr:last-child td { border-bottom: 0; }
+@media (max-width: 800px) {
+  .rule-docs { grid-template-columns: 1fr; }
+  .rule-page { max-width: none; }
+}
