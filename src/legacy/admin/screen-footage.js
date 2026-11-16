@@ -35,7 +35,10 @@ const isCraftOrigin = () => ORIGINS.find((o) => o.key === st.origin)?.kind === "
 const canSort = () => st.lib === "product" && !!st.sku && isCraftOrigin();
 const isFinished = (c) => c.craft_step === "hoan_thien" || (c.roles?.product_final || 0) >= 0.5;
 let covRef = { rows: [], columns: [] };
-let summaryRef = { huyk: 0, outro: 0 };
+let summaryRef = { huyk: 0, outro: 0, illus: 0, skus: {} };
+const SKU_KIND = { N: "nhan", L: "lac_tay", B: "bong_tai", K: "day_chuyen", D: "day_chuyen", O: "bong_tai" };
+const skuKind = (sku) => SKU_KIND[String(sku || "").trim().charAt(0).toUpperCase()] || "khac";
+const readyRows = () => (covRef.rows || []).filter((r) => r.ready);
 const libOf = (c) => (c.library === "huyk" ? "huyk" : c.library === "outro" ? "outro" : c.library === "illus" ? "illus" : "product");
 const readySkus = () => new Set((covRef.rows || []).filter((r) => r.ready).map((r) => r.sku));
 const shownProduct = (c) => libOf(c) !== "product" || (c.product_set && readySkus().has(c.product_set));
@@ -84,6 +87,15 @@ function inLib(c) {
 }
 function cats(lib) {
   const m = new Map(KINDS.map((k) => [k.key, { ...k, n: 0 }]));
+  const rows = readyRows();
+  if (rows.length) {
+    rows.forEach((r) => {
+      const k = r.category || skuKind(r.sku);
+      if (!m.has(k)) m.set(k, { key: k, label: r.category_label || k, n: 0 });
+      m.get(k).n += 1;
+    });
+    return [...m.values()].filter((c) => c.n > 0);
+  }
   lib.filter((c) => inLib(c)).forEach((c) => {
     const k = catOf(c);
     if (!m.has(k)) m.set(k, { key: k, label: c.category_label || k, n: 0 });
@@ -97,6 +109,7 @@ function skuClips(lib, sku = st.sku) {
 function skuRows(lib, cov) {
   const q = st.q.trim().toLowerCase();
   return (cov.rows || []).filter((r) => r.ready).filter((r) => {
+    if (st.cat && (r.category || skuKind(r.sku)) !== st.cat) return false;
     if (!q) return true;
     return `${r.sku} ${r.name || ""}`.toLowerCase().includes(q);
   }).map((r) => {
@@ -196,7 +209,16 @@ function clipsOf(lib) {
     && (st.lib === "product" && !st.sku ? true : !q || `${c.name} ${c.description_vi} ${c.step_label || ""} ${STEP_VI[c.craft_step] || ""} ${c.product_set || ""}`.toLowerCase().includes(q)));
 }
 function header(lib, src) {
-  const n = (k) => lib.filter((c) => libOf(c) === k && (k !== "product" || shownProduct(c))).length;
+  const n = (k) => {
+    if (k === "product") {
+      const rows = readyRows();
+      if (rows.length) return rows.length;
+      const skus = summaryRef.skus || {};
+      return Object.keys(skus).length;
+    }
+    if (k === "huyk" || k === "illus" || k === "outro") return Number(summaryRef[k] || 0);
+    return lib.filter((c) => libOf(c) === k).length;
+  };
   const busy = src.state === "scanning";
   return `<header class="ph-bar"><h1>Kho footage</h1>
     <div class="seg" role="tablist" aria-label="Kho">${Object.entries(LIBS).map(([k, v]) => `<button type="button" role="tab" data-lib="${k}" aria-selected="${st.lib === k}">${v} · ${n(k)}</button>`).join("")}</div>
@@ -225,7 +247,7 @@ function scanLabel(lib, src) {
 }
 function catBar(lib) {
   const cs = cats(lib);
-  const allKind = lib.filter((c) => inLib(c)).length;
+  const allKind = readyRows().length || lib.filter((c) => inLib(c)).length;
   const b = (k, l, n) => `<button type="button" class="pill" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="mono muted">${n}</span></button>`;
   return `<div class="fcats" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả loại", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>`;
 }
@@ -481,7 +503,7 @@ export async function render(view, ctx) {
   let lib = mergeLib();
   let src, cov;
   const timed = (p, ms, fallback) => Promise.race([p, new Promise((res) => setTimeout(() => res(fallback), ms))]);
-  let summary = { huyk: 0, outro: 0 };
+  let summary = { huyk: 0, outro: 0, illus: 0, skus: {} };
   [src, cov, usage, summary] = await Promise.all([
     timed(api.sourceStatus().catch(() => ({ configured: false })), 8000, { configured: false }),
     timed(api.coverage().catch(() => ({ rows: [], columns: [] })), 15000, { rows: [], columns: [] }),
