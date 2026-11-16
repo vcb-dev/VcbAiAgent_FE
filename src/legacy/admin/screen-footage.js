@@ -2,7 +2,7 @@
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
-  board: "index", shoot: "", hideStill: false };
+  board: "index", shoot: "", hideStill: false, composer: null, boardErr: "" };
 const LIBS = { product: "Sản phẩm", huyk: "HuyK", illus: "Minh hoạ AI", outro: "Outro" };
 const KINDS = [{ key: "nhan", label: "Nhẫn" }, { key: "lac_tay", label: "Lắc tay" },
   { key: "bong_tai", label: "Bông tai" }, { key: "day_chuyen", label: "Dây chuyền" }];
@@ -316,8 +316,7 @@ function mainHead(lib, gs) {
   }
   return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <h2 style="margin:0;font-size:18px;font-weight:700;${st.lib === "product" ? "font-family:var(--mono)" : ""}">${esc(title)}</h2>
-      <span class="muted">${clipsOf(lib).length} clip${sub ? " · " + esc(sub) : ""}</span><div style="flex:1"></div>
-      ${st.lib === "product" && st.sku ? `<a class="btn pri" href="/?sku=${encodeURIComponent(st.sku)}">Dựng video</a>` : ""}</div>
+      <span class="muted">${clipsOf(lib).length} clip${sub ? " · " + esc(sub) : ""}</span></div>
     ${chips ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>` : ""}`;
 }
 let usage = {};
@@ -400,15 +399,23 @@ function craftBoard(lib) {
   });
   const chips = [...shoots.values()].sort((a, b) => b.n - a.n);
   const rows = stepBoards(boardClips(lib));
+  const cm = st.composer || {};
   const tools = `<div class="ftools">
       <button type="button" class="btn" data-back-origin="1">← Nguồn</button>
-      <button type="button" class="btn" data-step-add="1">Thêm công đoạn</button>
       <button type="button" class="pill" data-board="index" aria-pressed="${st.board === "index"}">Theo số thứ mục</button>
       <button type="button" class="pill" data-board="tag" aria-pressed="${st.board === "tag"}">Gom theo tag công đoạn</button>
       <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
       <div class="sp"></div>
-      <a class="btn pri" href="/?sku=${encodeURIComponent(st.sku)}">Dựng video cho mã này</a>
+      <button type="button" class="btn pri" data-step-add="1">Thêm công đoạn</button>
     </div>
+    ${cm.kind === "add" ? `<form id="f-step-form" class="fadd" data-step-kind="add">
+      <label for="f-step-name">Tên công đoạn</label>
+      <input class="in" id="f-step-name" name="name" value="${esc(cm.name || "")}" placeholder="Ví dụ: Khò mềm lần 2" autocomplete="off">
+      <button type="submit" class="btn pri">Thêm</button>
+      <button type="button" class="btn" data-step-cancel="1">Hủy</button>
+      ${cm.err ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
+    </form>` : ""}
+    ${st.boardErr ? `<p class="ferr">${esc(st.boardErr)}</p>` : ""}
     <div class="fshoots"><span class="muted small">Lần quay</span>
       <button type="button" class="pill" data-shoot="" aria-pressed="${!st.shoot}">Tất cả</button>
       ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
@@ -416,19 +423,37 @@ function craftBoard(lib) {
     </div>
     <p class="muted small" style="margin:0">Kéo một clip thả vào công đoạn khác để chuyển tag. Kéo ra <b>Chưa xếp</b> nếu xếp nhầm.</p>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
-  const body = rows.map((row) => `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.idx}" data-drop-label="${esc(row.label)}">
+  const body = rows.map((row) => {
+    const editing = cm.kind === "edit" && Number(cm.idx) === Number(row.idx) && cm.label === row.label;
+    const deleting = cm.kind === "del" && Number(cm.idx) === Number(row.idx) && cm.label === row.label;
+    const locked = row.label === "Chưa xếp";
+    const title = editing
+      ? `<form id="f-step-form" class="fedit" data-step-kind="edit">
+          <label class="sr-only" for="f-step-name">Tên công đoạn</label>
+          <input class="in" id="f-step-name" name="name" value="${esc(cm.name ?? row.label)}" autocomplete="off">
+          ${cm.err ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
+        </form>`
+      : `<span class="fstep-t"><b>${esc(row.label)}</b>
+          <span class="muted small">${row.clips.length} clip${deleting ? " · clip sẽ chuyển về Chưa xếp" : ""}</span>
+          ${cm.err && deleting ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
+        </span>`;
+    const act = deleting
+      ? `<button type="button" class="btn sm pri" data-step-del-ok="${esc(row.label)}" data-step-idx="${row.idx}">Xóa mục</button>
+         <button type="button" class="btn sm" data-step-cancel="1">Hủy</button>`
+      : editing
+        ? `<button type="submit" form="f-step-form" class="btn sm pri">Lưu</button>
+           <button type="button" class="btn sm" data-step-cancel="1">Hủy</button>`
+        : `<button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.idx}">Sửa</button>
+           ${locked ? "" : `<button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.idx}">Xóa</button>`}`;
+    return `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.idx}" data-drop-label="${esc(row.label)}">
       <div class="fstep-h">
         <span class="fstep-n">${row.idx}</span>
-        <span class="fstep-t"><b>${esc(row.label)}</b>
-          <span class="muted small">${row.clips.length} clip</span>
-        </span>
-        <span class="fstep-act">
-          <button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.idx}">Sửa</button>
-          <button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.idx}">Xóa</button>
-        </span>
+        ${title}
+        <span class="fstep-act">${act}</span>
       </div>
       <div class="fstrip">${row.clips.length ? row.clips.map((c) => card(c, LB(c))).join("") : `<span class="muted small">Kéo clip vào đây</span>`}</div>
-    </section>`).join("");
+    </section>`;
+  }).join("");
   return `<div class="fboard">${tools}${body}</div>`;
 }
 function grid(lib) {
@@ -529,6 +554,40 @@ export async function render(view, ctx) {
   };
   const folderClips = (idx, label) => boardClips(lib).filter((c) => Number(c.step_index || 999) === Number(idx)
     && String(c.step_label || STEP_VI[c.craft_step] || "Chưa xếp") === String(label));
+  const nameTaken = (name, skipIdx, skipLabel) => stepBoards(boardClips(lib)).some((r) =>
+    r.label.trim().toLowerCase() === name.toLowerCase()
+    && !(Number(r.idx) === Number(skipIdx) && r.label === skipLabel));
+  const commitComposer = async () => {
+    const cm = st.composer;
+    if (!cm || (cm.kind !== "add" && cm.kind !== "edit")) return;
+    const name = String(cm.name || el.querySelector("#f-step-name")?.value || "").trim();
+    if (!name) { st.composer = { ...cm, err: "Nhập tên công đoạn" }; paint(); return; }
+    if (cm.kind === "add") {
+      if (nameTaken(name)) { st.composer = { ...cm, name, err: "Đã có công đoạn này" }; paint(); return; }
+      const used = stepBoards(boardClips(lib)).map((r) => Number(r.idx) || 0);
+      const idx = Math.max(0, ...used, ...extraFolders.map((f) => Number(f.idx) || 0)) + 1;
+      extraFolders = [...extraFolders, { idx, label: name }];
+      try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); st.composer = null; }
+      catch (err) { st.composer = { ...cm, name, err: err.message }; }
+      paint();
+      return;
+    }
+    const old = cm.label;
+    const idx = Number(cm.idx);
+    if (name === old) { st.composer = null; paint(); return; }
+    if (nameTaken(name, idx, old)) { st.composer = { ...cm, name, err: "Đã có công đoạn này" }; paint(); return; }
+    extraFolders = extraFolders.map((f) => (Number(f.idx) === idx && f.label === old ? { ...f, label: name } : f));
+    try {
+      for (const c of folderClips(idx, old)) {
+        c.step_label = name;
+        c.step_index = idx;
+        await api.setClipFolder(c.id, { step_index: idx, step_label: name });
+      }
+      await persistFolders();
+      st.composer = null;
+    } catch (err) { st.composer = { ...cm, name, err: err.message }; }
+    paint();
+  };
   await fillView();
   const paint = () => {
     covRef = cov || { rows: [], columns: [] };
@@ -546,6 +605,12 @@ export async function render(view, ctx) {
     const side = el.querySelector(".side-l");
     if (side) side.scrollTop = sideTop;
     watchMore();
+    const inp = el.querySelector("#f-step-name");
+    if (inp && (st.composer?.kind === "add" || st.composer?.kind === "edit")) {
+      inp.focus();
+      const pos = inp.value.length;
+      try { inp.setSelectionRange(pos, pos); } catch { /* ignore */ }
+    }
   };
   let io = null;
   const watchMore = () => {
@@ -588,31 +653,44 @@ export async function render(view, ctx) {
     const idx = Number(row.dataset.dropIdx || 0);
     const label = row.dataset.dropLabel || (step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step));
     const clip = lib.find((c) => c.id === id);
-    if (!clip || clip.product_set !== st.sku || originOf(clip) !== st.origin) { toast("Chỉ kéo clip của đúng mã và nguồn đang mở", true); return; }
+    if (!clip || clip.product_set !== st.sku || originOf(clip) !== st.origin) {
+      st.boardErr = "Chỉ kéo clip của đúng mã và nguồn đang mở";
+      paint();
+      return;
+    }
     if (Number(clip.step_index || 999) === idx && String(clip.step_label || "") === String(label)) return;
     const prev = { craft_step: clip.craft_step, step_label: clip.step_label, step_index: clip.step_index };
     const craft = NEW_SET.has(step) || step === "__unsorted" ? step : undefined;
     if (craft) clip.craft_step = craft;
     clip.step_label = label;
     clip.step_index = idx;
+    st.boardErr = "";
     paint();
     try {
       await api.setClipFolder(id, { step_index: idx, step_label: label, craft_step: craft });
       await persistFolders();
-      toast(`Đã chuyển sang ${label}`);
     } catch (err) {
       clip.craft_step = prev.craft_step;
       clip.step_label = prev.step_label;
       clip.step_index = prev.step_index;
+      st.boardErr = err.message;
       paint();
-      toast(err.message, true);
     }
   });
   el.addEventListener("dragend", () => {
     dragging = false;
     el.querySelectorAll(".drop-on,.cclip.dragging").forEach((x) => x.classList.remove("drop-on", "dragging"));
   });
+  el.addEventListener("submit", (e) => {
+    if (e.target.id !== "f-step-form") return;
+    e.preventDefault();
+    commitComposer();
+  });
   el.addEventListener("input", (e) => {
+    if (e.target.id === "f-step-name" && st.composer) {
+      st.composer = { ...st.composer, name: e.target.value, err: "" };
+      return;
+    }
     if (e.target.id !== "f-q") return;
     st.q = e.target.value;
     st.shown = PAGE;
@@ -631,44 +709,42 @@ export async function render(view, ctx) {
       st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return;
     }
     if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
-    if (t.hasAttribute("data-back-origin")) { st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.hasAttribute("data-back-origin")) {
+      st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; st.composer = null; st.boardErr = "";
+      await fillView(); paint(); return;
+    }
     if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.board) { st.board = t.dataset.board; paint(); return; }
     if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
     if (t.hasAttribute("data-step-add")) {
-      const name = (window.prompt("Tên công đoạn mới") || "").trim();
-      if (!name) return;
-      const used = stepBoards(boardClips(lib)).map((r) => Number(r.idx) || 0);
-      const idx = Math.max(0, ...used, ...extraFolders.map((f) => Number(f.idx) || 0)) + 1;
-      extraFolders = [...extraFolders, { idx, label: name }];
-      try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch (err) { toast(err.message, true); }
+      st.composer = st.composer?.kind === "add" ? null : { kind: "add", name: "" };
+      st.boardErr = "";
       paint();
-      toast(`Đã thêm «${name}»`);
+      return;
+    }
+    if (t.hasAttribute("data-step-cancel")) {
+      st.composer = null;
+      paint();
       return;
     }
     if (t.dataset.stepEdit !== undefined) {
-      const old = t.dataset.stepEdit;
-      const idx = Number(t.dataset.stepIdx);
-      const name = (window.prompt("Đổi tên công đoạn", old) || "").trim();
-      if (!name || name === old) return;
-      extraFolders = extraFolders.map((f) => (Number(f.idx) === idx && f.label === old ? { ...f, label: name } : f));
-      try {
-        for (const c of folderClips(idx, old)) {
-          c.step_label = name;
-          c.step_index = idx;
-          await api.setClipFolder(c.id, { step_index: idx, step_label: name });
-        }
-        await persistFolders();
-      } catch (err) { toast(err.message, true); }
+      st.composer = { kind: "edit", idx: Number(t.dataset.stepIdx), label: t.dataset.stepEdit, name: t.dataset.stepEdit };
+      st.boardErr = "";
       paint();
       return;
     }
     if (t.dataset.stepDel !== undefined) {
-      const label = t.dataset.stepDel;
+      if (t.dataset.stepDel === "Chưa xếp") return;
+      st.composer = { kind: "del", idx: Number(t.dataset.stepIdx), label: t.dataset.stepDel };
+      st.boardErr = "";
+      paint();
+      return;
+    }
+    if (t.dataset.stepDelOk !== undefined) {
+      const label = t.dataset.stepDelOk;
       const idx = Number(t.dataset.stepIdx);
-      if (label === "Chưa xếp") { toast("Không xóa mục Chưa xếp", true); return; }
-      if (!window.confirm(`Xóa mục «${label}»? Clip trong mục sẽ về Chưa xếp.`)) return;
+      if (label === "Chưa xếp") return;
       try {
         for (const c of folderClips(idx, label)) {
           c.craft_step = "__unsorted";
@@ -678,7 +754,10 @@ export async function render(view, ctx) {
         }
         extraFolders = extraFolders.filter((f) => !(Number(f.idx) === idx && f.label === label));
         await persistFolders();
-      } catch (err) { toast(err.message, true); }
+        st.composer = null;
+      } catch (err) {
+        st.composer = { ...(st.composer || { kind: "del", idx, label }), err: err.message };
+      }
       paint();
       return;
     }
@@ -716,12 +795,17 @@ export async function render(view, ctx) {
     if (src.state === "scanning") wasBusy = true;
     src = await api.sourceStatus().catch(() => src);
     const b = el.querySelector("#src-scan");
-    if (b && src.state === "scanning") { b.disabled = true; b.textContent = scanLabel(lib, src); if (!el.querySelector("#src-cancel")) paint(); }
-    if (src.state === "scanning" && Date.now() - lastReload > 45000 && !st.picked) await reloadLib();
+    if (b && src.state === "scanning") { b.disabled = true; b.textContent = scanLabel(lib, src); if (!el.querySelector("#src-cancel") && !st.composer) paint(); }
+    if (src.state === "scanning" && Date.now() - lastReload > 45000 && !st.picked && !st.composer) await reloadLib();
     if (wasBusy && src.state !== "scanning") { await reloadLib(); toast(src.state === "cancelled" ? `Đã hủy quét · giữ ${src.clips} clip` : `Đã quét xong · ${src.clips} clip`); }
     wasBusy = src.state === "scanning";
   }, 2500);
-  const onKey = (e) => { if (!el.getClientRects().length) return; if (e.key === "Escape" && st.picked) { st.picked = null; el.querySelector("#fprev").innerHTML = ""; } };
+  const onKey = (e) => {
+    if (!el.getClientRects().length) return;
+    if (e.key !== "Escape") return;
+    if (st.composer) { e.preventDefault(); st.composer = null; paint(); return; }
+    if (st.picked) { st.picked = null; el.querySelector("#fprev").innerHTML = ""; }
+  };
   document.addEventListener("keydown", onKey);
   ctx.setCleanup(() => { io?.disconnect(); clearInterval(timer); document.removeEventListener("keydown", onKey); });
 }

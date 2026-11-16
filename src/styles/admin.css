@@ -876,6 +876,14 @@ summary.rs-h { cursor: pointer; }
 .fboard { display: flex; flex-direction: column; gap: 12px; }
 .ftools, .fshoots { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ftools .sp { flex: 1; }
+.fadd, .fedit { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fadd { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }
+.fadd label { font-size: 13px; font-weight: 650; color: var(--ink); }
+.fadd .in { width: min(360px, 100%); }
+.fedit { flex: 1; min-width: 0; }
+.fedit .in { width: 100%; }
+.ferr { margin: 0; width: 100%; font-size: 13px; color: var(--bad, #b42318); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .fstep { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 14px; align-items: start;
   padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }
 .fstep.drop-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
