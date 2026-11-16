@@ -163,6 +163,7 @@ function isFileMeta(s) {
   const head = cleanHeading(s.heading);
   if (/^Nguồn\s*:/i.test(body) || /^Nguồn\s*:/i.test(head)) return true;
   if (/^Framework Content 5A/i.test(head) && body.length < 280) return true;
+  if (/^Quy tắc viết content/i.test(head)) return true;
   return false;
 }
 
@@ -188,9 +189,10 @@ function contentHtml(content, docId, secAt, editing) {
   const key = `${doc.id}:${i}`;
   const on = editing === key;
   const title = s ? (cleanHeading(s.heading) || `Mục ${n + 1}`) : "";
-  return `<div class="rule-pills" role="tablist" aria-label="Nhóm quy tắc content">${docs.map((d) =>
-    `<button type="button" class="rule-pill${d.id === doc.id ? " on" : ""}" data-docid="${esc(d.id)}" aria-selected="${d.id === doc.id}">${esc(d.title)}</button>`).join("")}</div>
-    <p class="rule-lead">${esc(doc.hint || "")}</p>
+  const pills = docs.length > 1 ? `<div class="rule-pills" role="tablist" aria-label="Nhóm quy tắc content">${docs.map((d) =>
+    `<button type="button" class="rule-pill${d.id === doc.id ? " on" : ""}" data-docid="${esc(d.id)}" aria-selected="${d.id === doc.id}">${esc(d.title)}</button>`).join("")}</div>` : "";
+  return `${pills}
+    <p class="rule-lead">${esc(doc.hint || content.hint || "")}</p>
     <div class="rule-split">
       <nav class="rule-nav" aria-label="Mục trong file">
         <p class="rule-nav-k">${shown.length} mục</p>
