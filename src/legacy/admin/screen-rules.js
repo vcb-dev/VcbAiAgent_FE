@@ -147,22 +147,38 @@ function cleanHeading(h) {
   return String(h || "").replace(/^#{1,3}\s+/, "").replace(/^\d+\.\s+/, "").trim();
 }
 
+function isFileMeta(s) {
+  const body = String(s.body || "").trim();
+  const head = cleanHeading(s.heading);
+  if (/^Nguồn\s*:/i.test(body) || /^Nguồn\s*:/i.test(head)) return true;
+  if (/^Framework Content 5A/i.test(head) && body.length < 280) return true;
+  return false;
+}
+
+function hiddenSec(docId, i, s) {
+  return `<textarea class="sr" tabindex="-1" aria-hidden="true" data-doc="${esc(docId)}" data-sec="${i}" data-k="body">${esc(s.body || "")}</textarea>
+    <input type="hidden" data-doc="${esc(docId)}" data-sec="${i}" data-k="heading" value="${esc(s.heading || "")}">`;
+}
+
 function contentHtml(content, docId, editing) {
   const docs = content.docs || [];
   const doc = docs.find((d) => d.id === docId) || docs[0];
   if (!doc) return `<p class="muted">Chưa có quy tắc content.</p>`;
+  const rows = (doc.sections || []).map((s, i) => ({ s, i }));
+  const shown = rows.filter(({ s }) => !isFileMeta(s));
   return `<div class="rule-docs" role="tablist" aria-label="Nhóm quy tắc content">${docs.map((d) =>
     `<button type="button" class="rule-doc${d.id === doc.id ? " on" : ""}" data-docid="${esc(d.id)}" aria-selected="${d.id === doc.id}">
       <b>${esc(d.title)}</b><span>${esc(d.hint)}</span>
     </button>`).join("")}</div>
     <section class="rule-g" data-doc="${esc(doc.id)}">
-      ${(doc.sections || []).map((s, i) => {
+      ${rows.filter(({ s }) => isFileMeta(s)).map(({ s, i }) => hiddenSec(doc.id, i, s)).join("")}
+      ${shown.map(({ s, i }, n) => {
         const key = `${doc.id}:${i}`;
         const on = editing === key;
-        const title = cleanHeading(s.heading) || `Mục ${i + 1}`;
+        const title = cleanHeading(s.heading) || `Mục ${n + 1}`;
         return `<article class="rule-card rule-read" data-seckey="${esc(key)}">
           <div class="rule-hd">
-            <span class="rule-num">${i + 1}</span>
+            <span class="rule-num">${n + 1}</span>
             <div class="grow"><b>${esc(title)}</b></div>
             <button type="button" class="btn sm" data-edit="${esc(key)}">${on ? "Xong" : "Sửa"}</button>
           </div>
@@ -172,9 +188,7 @@ function contentHtml(content, docId, editing) {
             <label class="rule-f"><span class="sr">Nội dung mục</span>
               <textarea class="in rule-md" rows="${Math.min(16, Math.max(8, String(s.body || "").split("\n").length + 1))}"
                 data-doc="${esc(doc.id)}" data-sec="${i}" data-k="body">${esc(s.body || "")}</textarea>
-            </label>` : `${bodyHtml(s.body)}
-            <textarea class="sr" tabindex="-1" aria-hidden="true" data-doc="${esc(doc.id)}" data-sec="${i}" data-k="body">${esc(s.body || "")}</textarea>
-            <input type="hidden" data-doc="${esc(doc.id)}" data-sec="${i}" data-k="heading" value="${esc(s.heading || "")}">`}
+            </label>` : `${bodyHtml(s.body)}${hiddenSec(doc.id, i, s)}`}
         </article>`;
       }).join("")}
     </section>`;
