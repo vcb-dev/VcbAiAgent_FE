@@ -12,6 +12,7 @@ const SCREENS = {
   social: () => import("../legacy/admin/screen-social.js"),
   workflow: () => import("../legacy/admin/screen-workflow.js?blk-edit"),
   fx: () => import("../legacy/admin/screen-fx.js?fill"),
+  rules: () => import("../legacy/admin/screen-rules.js"),
   ai: () => import("../legacy/admin/screen-ai.js?blk-ico"),
   more: () => import("../legacy/admin/screen-more.js"),
   inventory: () => import("../legacy/admin/screen-inventory.js"),
