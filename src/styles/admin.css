@@ -871,6 +871,25 @@ summary.rs-h { cursor: pointer; }
 .drange .drl { white-space: nowrap; }
 .csec-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
 
+/* Kho footage · công đoạn: một hàng mỗi bước, clip xếp ngang. Màu lấy từ theme, không nền đen. */
+.fscreen .split.board > .side-l { display: none; }
+.fboard { display: flex; flex-direction: column; gap: 12px; }
+.ftools, .fshoots { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ftools .sp { flex: 1; }
+.fstep { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 14px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }
+.fstep.drop-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.fstep-h { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.fstep-n { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); font: 700 13px var(--mono); }
+.fstep-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fstep-t b { font-size: 14px; }
+.fstep-tag { align-self: flex-start; font: 600 11px var(--mono); padding: 1px 6px; border-radius: 5px; background: var(--chip-bg); color: var(--muted); }
+.fstrip { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior: contain; padding-bottom: 2px; }
+.fstrip .cclip { flex: none; width: 108px; }
+.fstrip .cclip .meta { padding: 6px 8px; font-size: 11px; }
+@media (max-width: 800px) { .fstep { grid-template-columns: 1fr; } }
+
 /* Kho footage: one screen high on desktop — the product list (left) and the clip grid scroll on their own */
 @media (min-width: 1000px) {
   .fscreen { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }

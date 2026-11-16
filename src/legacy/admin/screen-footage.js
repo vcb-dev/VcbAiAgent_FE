@@ -1,7 +1,8 @@
 // Kho footage theo mã SP: chọn SKU rồi xếp công đoạn của đúng mã đó (không gộp mọi mã chung một cột).
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
-const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null };
+const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
+  board: "index", shoot: "", hideStill: false };
 const LIBS = { product: "Sản phẩm", huyk: "HuyK", illus: "Minh hoạ AI", outro: "Outro" };
 const KINDS = [{ key: "nhan", label: "Nhẫn" }, { key: "lac_tay", label: "Lắc tay" },
   { key: "bong_tai", label: "Bông tai" }, { key: "day_chuyen", label: "Dây chuyền" }];
@@ -46,6 +47,14 @@ const MK = { vn: "VN", jp: "JP", eu: "EU", us: "US", th: "TH", id: "ID", tw: "TW
 const ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="14" r="6"/><path d="M9.5 6.5L12 4l2.5 2.5L12 9z"/></svg>';
 const dur = (c) => (c.usable ? (c.usable[1] - c.usable[0] + 0.05).toFixed(1) + "s" : "");
 const unsorted = (c) => !NEW_SET.has(c.craft_step);
+const isStill = (c) => c.upload_kind === "image" || c.tech?.codec === "image" || c.tags?.motion_level === 1;
+function shootOf(c) {
+  const folder = String(c.source_rel || "").split("/").find((p) => /^\d{6}[_-]/.test(p)) || "";
+  if (!folder) return { key: "", label: "" };
+  const date = folder.slice(0, 6);
+  const staff = (folder.match(/_([A-Za-z]{2,4}\d{2})$/) || [])[1] || "";
+  return { key: folder, label: staff ? `${date} · ${staff.toUpperCase()}` : date };
+}
 
 function matchOrigin(c) {
   if (!st.origin) return true;
@@ -274,9 +283,14 @@ function mainHead(lib, gs) {
   }
   const g = st.lib === "product" ? gs.find((x) => x.key === st.step) : gs.find((x) => x.key === st.group);
   const meta = (covRef.rows || []).find((r) => r.sku === st.sku);
+  if (canSort()) {
+    return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button type="button" class="btn" data-back-origin>← Nguồn</button>
+      <h2 style="margin:0;font-size:18px;font-weight:700;font-family:var(--mono)">${esc(st.sku)}</h2>
+      <span class="muted">${esc(meta?.name || "")}${meta?.name ? " · " : ""}${esc(originLabel(st.origin))}</span></div>`;
+  }
   const title = st.lib === "product" ? `${st.sku} · ${originLabel(st.origin)}` : (g ? g.label : `Tất cả ${LIBS[st.lib]}`);
   const sub = st.lib === "product" ? (st.step ? (STEP_VI[st.step] || "Chưa xếp") : (meta?.name || "")) : (g?.sub || "");
-  const hint = canSort() ? `<p class="muted small" style="margin:0">Kéo clip sang công đoạn bên trái. Kéo ra <b>Chưa xếp</b> nếu xếp nhầm. Chỉ clip <b>${esc(originLabel(st.origin))}</b> của mã ${esc(st.sku)}.</p>` : "";
   let chips = "";
   if (st.lib === "outro") {
     chips = ["Thị trường Việt Nam", "Voice tiếng Việt", "Dọc 1080×1920", st.group === "huyk" || !st.group ? "Tự ghép cuối mọi video" : "Chọn tay trong Studio"]
@@ -286,7 +300,7 @@ function mainHead(lib, gs) {
       <h2 style="margin:0;font-size:18px;font-weight:700;${st.lib === "product" ? "font-family:var(--mono)" : ""}">${esc(title)}</h2>
       <span class="muted">${clipsOf(lib).length} clip${sub ? " · " + esc(sub) : ""}</span><div style="flex:1"></div>
       ${st.lib === "product" && st.sku ? `<a class="btn pri" href="/?sku=${encodeURIComponent(st.sku)}">Dựng video</a>` : ""}</div>
-    ${hint}${chips ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>` : ""}`;
+    ${chips ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>` : ""}`;
 }
 let usage = {};
 const PAGE = 60;
@@ -330,7 +344,73 @@ function originCard(g) {
         <span class="covbar" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<i class="${i < on ? "on" : ""}"></i>`).join("")}</span>` : ""}
       </span></button>`;
 }
+function boardClips(lib) {
+  let list = skuClips(lib);
+  if (st.hideStill) list = list.filter((c) => !isStill(c));
+  if (st.shoot) list = list.filter((c) => shootOf(c).key === st.shoot);
+  const q = st.q.trim().toLowerCase();
+  if (q) list = list.filter((c) => `${c.name} ${c.step_label || ""} ${c.product_set || ""} ${STEP_VI[c.craft_step] || ""}`.toLowerCase().includes(q));
+  return list;
+}
+function stepBoards(clips) {
+  if (st.board === "tag") {
+    const order = ["__unsorted", ...NEW_STEPS];
+    return order.map((step, i) => {
+      const list = clips.filter((c) => (step === "__unsorted" ? unsorted(c) : c.craft_step === step));
+      if (!list.length) return null;
+      return { drop: step, idx: i + 1, label: step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step), tag: step === "__unsorted" ? "" : step, clips: list };
+    }).filter(Boolean);
+  }
+  const by = new Map();
+  clips.forEach((c) => {
+    const idx = c.step_index || 999;
+    const label = unsorted(c) && !c.step_label ? "Chưa xếp" : (c.step_label || STEP_VI[c.craft_step] || "Chưa xếp");
+    const key = `${idx}|${label}`;
+    if (!by.has(key)) by.set(key, { idx, label, tag: c.craft_step && NEW_SET.has(c.craft_step) ? c.craft_step : "", clips: [] });
+    by.get(key).clips.push(c);
+  });
+  return [...by.values()].sort((a, b) => a.idx - b.idx || a.label.localeCompare(b.label, "vi")).map((row, i) => ({
+    ...row, drop: row.tag || "__unsorted", idx: row.idx === 999 ? i + 1 : row.idx,
+  }));
+}
+function craftBoard(lib) {
+  const all = skuClips(lib).filter((c) => !st.hideStill || !isStill(c));
+  const shoots = new Map();
+  all.forEach((c) => {
+    const s = shootOf(c);
+    if (!s.key) return;
+    shoots.set(s.key, { ...s, n: (shoots.get(s.key)?.n || 0) + 1 });
+  });
+  const chips = [...shoots.values()].sort((a, b) => b.n - a.n);
+  const rows = stepBoards(boardClips(lib));
+  const tools = `<div class="ftools">
+      <button type="button" class="pill" data-board="index" aria-pressed="${st.board === "index"}">Theo số thứ mục</button>
+      <button type="button" class="pill" data-board="tag" aria-pressed="${st.board === "tag"}">Gom theo tag công đoạn</button>
+      <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
+      <div class="sp"></div>
+      <a class="btn pri" href="/?sku=${encodeURIComponent(st.sku)}">Dựng video cho mã này</a>
+    </div>
+    <div class="fshoots"><span class="muted small">Lần quay</span>
+      <button type="button" class="pill" data-shoot="" aria-pressed="${!st.shoot}">Tất cả</button>
+      ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
+      <span class="muted small">Mỗi video chỉ lấy source của một lần quay, không trộn.</span>
+    </div>
+    <p class="muted small" style="margin:0">Kéo một clip thả vào công đoạn khác để chuyển tag. Kéo ra <b>Chưa xếp</b> nếu xếp nhầm.</p>`;
+  if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
+  const body = rows.map((row) => `<section class="fstep" data-drop-step="${esc(row.drop)}">
+      <div class="fstep-h">
+        <span class="fstep-n">${row.idx}</span>
+        <span class="fstep-t"><b>${esc(row.label)}</b>
+          ${row.tag ? `<span class="fstep-tag">${esc(row.tag)}</span>` : ""}
+          <span class="muted small">${esc((STEP_VI[row.tag] && STEP_VI[row.tag] !== row.label ? STEP_VI[row.tag] + " · " : ""))}${row.clips.length} clip</span>
+        </span>
+      </div>
+      <div class="fstrip">${row.clips.map((c) => card(c, LB(c))).join("")}</div>
+    </section>`).join("");
+  return `<div class="fboard">${tools}${body}</div>`;
+}
 function grid(lib) {
+  if (st.lib === "product" && st.sku && isCraftOrigin()) return craftBoard(lib);
   if (st.lib === "product" && !st.sku) {
     const rows = skuRows(lib, covRef);
     if (!rows.length) return `<div class="empty">Không có mã khớp. Đổi loại hoặc ô tìm.</div>`;
@@ -427,9 +507,10 @@ export async function render(view, ctx) {
     }
     if (st.lib === "product" && st.sku && !readySkus().has(st.sku)) { st.sku = ""; st.origin = ""; st.step = ""; }
     const gs = groups(lib, cov);
+    const board = st.lib === "product" && st.sku && isCraftOrigin();
     const sideTop = el.querySelector(".side-l")?.scrollTop || 0;
-    el.innerHTML = `${header(lib, src)}<div class="split">
-      <aside class="side-l" aria-label="Nhóm">${sideList(lib, gs)}</aside>
+    el.innerHTML = `${header(lib, src)}<div class="split${board ? " board" : ""}">
+      <aside class="side-l" aria-label="Nhóm">${board ? "" : sideList(lib, gs)}</aside>
       <section class="list" id="fmain">${mainHead(lib, gs)}<div id="fgrid">${grid(lib)}</div></section></div><div id="fprev">${preview(lib)}</div>`;
     const side = el.querySelector(".side-l");
     if (side) side.scrollTop = sideTop;
@@ -516,7 +597,10 @@ export async function render(view, ctx) {
     }
     if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; await fillView(); paint(); return; }
-    if (t.dataset.backOrigin) { st.origin = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.board) { st.board = t.dataset.board; paint(); return; }
+    if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
+    if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
+    if (t.dataset.backOrigin) { st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.dataset.step !== undefined) { st.step = st.step === t.dataset.step ? "" : t.dataset.step; st.shown = 60; paint(); return; }
