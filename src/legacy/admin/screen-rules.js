@@ -129,18 +129,29 @@ function fieldHtml(rule, f) {
   </label>`;
 }
 
-function a4Html(a4) {
-  return (a4.groups || []).map((g) => `<section class="rule-g">
-      <h2>${esc(g.title)}</h2>
-      ${g.rules.map((r) => `<article class="rule-card${r.enabled ? "" : " off"}" data-code="${esc(r.code)}">
-        <div class="rule-hd">
-          <label class="rtgl"><input type="checkbox" data-on="${esc(r.code)}" ${r.enabled ? "checked" : ""}><span>Bật</span></label>
-          <div class="grow"><b>${esc(r.title)}</b></div>
-        </div>
-        <p class="rule-note">${esc(r.note)}</p>
-        ${r.fields?.length ? `<div class="rule-fields">${r.fields.map((f) => fieldHtml(r, f)).join("")}</div>` : ""}
-      </article>`).join("")}
-    </section>`).join("");
+function a4Html(a4, groupIdx) {
+  const groups = a4.groups || [];
+  const gi = Math.min(Math.max(0, groupIdx), Math.max(0, groups.length - 1));
+  return `<div class="rule-split">
+    <nav class="rule-nav" aria-label="Nhóm quy tắc A4">
+      <p class="rule-nav-k">Nhóm</p>
+      ${groups.map((g, i) => `<button type="button" class="rule-nav-i${i === gi ? " on" : ""}" data-agroup="${i}">
+        <b>${esc(g.title)}</b><span>${(g.rules || []).length} mục</span>
+      </button>`).join("")}
+    </nav>
+    <div class="rule-main">
+      ${groups.map((g, i) => `<section class="rule-g${i === gi ? "" : " hidden"}" data-ag="${i}">
+        ${g.rules.map((r) => `<article class="rule-card${r.enabled ? "" : " off"}" data-code="${esc(r.code)}">
+          <div class="rule-hd">
+            <label class="rtgl"><input type="checkbox" data-on="${esc(r.code)}" ${r.enabled ? "checked" : ""}><span>Bật</span></label>
+            <div class="grow"><b>${esc(r.title)}</b></div>
+          </div>
+          <p class="rule-note">${esc(r.note)}</p>
+          ${r.fields?.length ? `<div class="rule-fields">${r.fields.map((f) => fieldHtml(r, f)).join("")}</div>` : ""}
+        </article>`).join("")}
+      </section>`).join("")}
+    </div>
+  </div>`;
 }
 
 function cleanHeading(h) {
@@ -160,23 +171,36 @@ function hiddenSec(docId, i, s) {
     <input type="hidden" data-doc="${esc(docId)}" data-sec="${i}" data-k="heading" value="${esc(s.heading || "")}">`;
 }
 
-function contentHtml(content, docId, editing) {
+function shownSecs(doc) {
+  return (doc.sections || []).map((s, i) => ({ s, i })).filter(({ s }) => !isFileMeta(s));
+}
+
+function contentHtml(content, docId, secAt, editing) {
   const docs = content.docs || [];
   const doc = docs.find((d) => d.id === docId) || docs[0];
   if (!doc) return `<p class="muted">Chưa có quy tắc content.</p>`;
   const rows = (doc.sections || []).map((s, i) => ({ s, i }));
-  const shown = rows.filter(({ s }) => !isFileMeta(s));
-  return `<div class="rule-docs" role="tablist" aria-label="Nhóm quy tắc content">${docs.map((d) =>
-    `<button type="button" class="rule-doc${d.id === doc.id ? " on" : ""}" data-docid="${esc(d.id)}" aria-selected="${d.id === doc.id}">
-      <b>${esc(d.title)}</b><span>${esc(d.hint)}</span>
-    </button>`).join("")}</div>
-    <section class="rule-g" data-doc="${esc(doc.id)}">
-      ${rows.filter(({ s }) => isFileMeta(s)).map(({ s, i }) => hiddenSec(doc.id, i, s)).join("")}
-      ${shown.map(({ s, i }, n) => {
-        const key = `${doc.id}:${i}`;
-        const on = editing === key;
-        const title = cleanHeading(s.heading) || `Mục ${n + 1}`;
-        return `<article class="rule-card rule-read" data-seckey="${esc(key)}">
+  const shown = shownSecs(doc);
+  const cur = shown.find(({ i }) => i === secAt) || shown[0];
+  const n = cur ? shown.indexOf(cur) : 0;
+  const s = cur?.s;
+  const i = cur?.i ?? 0;
+  const key = `${doc.id}:${i}`;
+  const on = editing === key;
+  const title = s ? (cleanHeading(s.heading) || `Mục ${n + 1}`) : "";
+  return `<div class="rule-pills" role="tablist" aria-label="Nhóm quy tắc content">${docs.map((d) =>
+    `<button type="button" class="rule-pill${d.id === doc.id ? " on" : ""}" data-docid="${esc(d.id)}" aria-selected="${d.id === doc.id}">${esc(d.title)}</button>`).join("")}</div>
+    <p class="rule-lead">${esc(doc.hint || "")}</p>
+    <div class="rule-split">
+      <nav class="rule-nav" aria-label="Mục trong file">
+        <p class="rule-nav-k">${shown.length} mục</p>
+        ${shown.map((row, k) => `<button type="button" class="rule-nav-i${row.i === i ? " on" : ""}" data-secpick="${row.i}">
+          <span class="rule-mini">${k + 1}</span><b>${esc(cleanHeading(row.s.heading) || `Mục ${k + 1}`)}</b>
+        </button>`).join("")}
+      </nav>
+      <div class="rule-main">
+        ${rows.filter(({ s: x }) => isFileMeta(x) || x !== s).map(({ s: x, i: ix }) => hiddenSec(doc.id, ix, x)).join("")}
+        ${s ? `<article class="rule-card rule-read rule-pane" data-seckey="${esc(key)}">
           <div class="rule-hd">
             <span class="rule-num">${n + 1}</span>
             <div class="grow"><b>${esc(title)}</b></div>
@@ -186,12 +210,11 @@ function contentHtml(content, docId, editing) {
               <input class="in" data-doc="${esc(doc.id)}" data-sec="${i}" data-k="heading" value="${esc(s.heading || "")}">
             </label>
             <label class="rule-f"><span class="sr">Nội dung mục</span>
-              <textarea class="in rule-md" rows="${Math.min(16, Math.max(8, String(s.body || "").split("\n").length + 1))}"
-                data-doc="${esc(doc.id)}" data-sec="${i}" data-k="body">${esc(s.body || "")}</textarea>
+              <textarea class="in rule-md" rows="14" data-doc="${esc(doc.id)}" data-sec="${i}" data-k="body">${esc(s.body || "")}</textarea>
             </label>` : `${bodyHtml(s.body)}${hiddenSec(doc.id, i, s)}`}
-        </article>`;
-      }).join("")}
-    </section>`;
+        </article>` : ""}
+      </div>
+    </div>`;
 }
 
 function readA4(el, a4) {
@@ -244,6 +267,8 @@ export async function render(view, ctx) {
   let busy = false;
   let editing = "";
   let docId = (data.content?.docs || [])[0]?.id || "framework";
+  let secAt = shownSecs((data.content?.docs || []).find((d) => d.id === docId) || {}).[0]?.i ?? 0;
+  let a4Group = 0;
 
   const paint = () => {
     const a4 = data.a4 || {};
@@ -255,8 +280,7 @@ export async function render(view, ctx) {
       <button class="btn pri" type="button" data-save ${busy ? "disabled" : ""}>Lưu và áp dụng</button>
     </header>
     <div class="page rule-page">
-      <p class="rule-lead">${esc((tab === "a4" ? a4.hint : content.hint) || "")}</p>
-      ${tab === "a4" ? a4Html(a4) : contentHtml(content, docId, editing)}
+      ${tab === "a4" ? `<p class="rule-lead">${esc(a4.hint || "")}</p>${a4Html(a4, a4Group)}` : contentHtml(content, docId, secAt, editing)}
     </div>`;
   };
 
@@ -284,8 +308,26 @@ export async function render(view, ctx) {
     if (docBtn) {
       stashContent(el, data.content);
       docId = docBtn.dataset.docid;
+      secAt = shownSecs((data.content?.docs || []).find((d) => d.id === docId) || {}).[0]?.i ?? 0;
       editing = "";
       paint();
+      return;
+    }
+    const pick = e.target.closest("[data-secpick]");
+    if (pick) {
+      stashContent(el, data.content);
+      secAt = Number(pick.dataset.secpick);
+      editing = "";
+      paint();
+      el.querySelector(".rule-main")?.scrollTo(0, 0);
+      return;
+    }
+    const ag = e.target.closest("[data-agroup]");
+    if (ag) {
+      a4Group = Number(ag.dataset.agroup);
+      el.querySelectorAll("[data-agroup]").forEach((b) => b.classList.toggle("on", Number(b.dataset.agroup) === a4Group));
+      el.querySelectorAll("[data-ag]").forEach((sec) => sec.classList.toggle("hidden", Number(sec.dataset.ag) !== a4Group));
+      el.querySelector(".rule-main")?.scrollTo(0, 0);
       return;
     }
     const ed = e.target.closest("[data-edit]");
