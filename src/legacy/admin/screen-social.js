@@ -1,10 +1,10 @@
-// Đăng & hiệu quả: Video đã đăng · Lịch đăng theo page · Hiệu quả (AI phân tích từng video, PAAST, dựng, bài học) · Kết nối.
+// Đăng & hiệu quả: Video đã đăng · Lịch đăng theo page · Hiệu quả · Quảng cáo. Kết nối kênh nằm ở Cài đặt.
 import { api, appUrl, esc, toast } from "./admin-api.js";
 import { moneyShort } from "../i18n.js";
 import * as DR from "./date-range.js";
 import { downloadXlsx, printReport, hbars, daily, shares, K as KR, fmtN } from "./report-tools.js";
 
-const TABS = { posts: "Video đã đăng", schedule: "Lịch đăng", perf: "Hiệu quả", ads: "Quảng cáo", connect: "Kết nối" };
+const TABS = { posts: "Video đã đăng", schedule: "Lịch đăng", perf: "Hiệu quả", ads: "Quảng cáo" };
 const PF = { facebook: ["FB", "#1877F2", "Facebook"], instagram: ["IG", "#C13584", "Instagram"], tiktok: ["TT", "#E11D48", "TikTok"],
   youtube: ["YT", "#CC0000", "YouTube"], threads: ["@", "#3A3C42", "Threads"] };
 const AREA = { content: ["Content", "a3"], hook: ["Hook", "a5"], template: ["Template", "a4"], length: ["Độ dài", "a4"], schedule: ["Giờ đăng", "a2"], language: ["Ngôn ngữ", "a1"] };
@@ -123,7 +123,7 @@ function postsView(lib) {
 
 function postGrid(lib) {
   const rows = postRows(lib);
-  if (!rows.length) return `<div class="empty">${lib.rows.length ? "Không có video khớp bộ lọc." : 'Chưa có dữ liệu. Vào tab <a href="#/social/connect">Kết nối</a>, kết nối page rồi bấm "Cào tất cả".'}</div>`;
+  if (!rows.length) return `<div class="empty">${lib.rows.length ? "Không có video khớp bộ lọc." : 'Chưa có dữ liệu. Vào <a href="#/ai/connect">Cài đặt › Kết nối kênh</a>, kết nối page rồi bấm "Cào tất cả".'}</div>`;
   return `<div class="vgrid">${rows.slice(0, st.shown).map((r) => `<a class="vcard${r.win ? " win" : ""}" href="#/social/perf/${encodeURIComponent(r.key)}">
       <span class="vth">${r.thumb ? `<img src="${esc(r.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
         <span class="vb tl ${r.by}">${r.by === "ai" ? "AI đăng" : "Editor đăng"}</span><span class="vb tr">${pf(r.platform)}</span>
@@ -139,7 +139,7 @@ function postGrid(lib) {
 /* ---------- Lịch đăng ---------- */
 const STATUS = { scheduled: "chờ đăng", pending: "chờ duyệt", published: "đã đăng", draft_sent: "ở hộp thư", error: "lỗi", publishing: "đang đăng" };
 function scheduleView(lib, d, ex) {
-  if (!lib.channels.length) return '<div class="empty">Chưa có kênh nào. Vào tab <a href="#/social/connect">Kết nối</a> để kết nối Facebook / Instagram / TikTok.</div>';
+  if (!lib.channels.length) return '<div class="empty">Chưa có kênh nào. Vào <a href="#/ai/connect">Cài đặt › Kết nối kênh</a> để kết nối Facebook / Instagram / TikTok.</div>';
   const chs = lib.channels.filter((c) => (!st.team || c.team === st.team) && (!st.chq || c.name.toLowerCase().includes(st.chq.toLowerCase())));
   if (!lib.channels.some((c) => c.cid === st.cid)) st.cid = (chs[0] || lib.channels[0]).cid;
   st.upc = {}; d.posts.forEach((x) => { if (["scheduled", "pending"].includes(x.status)) st.upc[x.cid] = (st.upc[x.cid] || 0) + 1; });
@@ -570,62 +570,6 @@ function lessonsDrawer(L) {
       <button class="btn pri" type="button" data-learn>AI rút bài học từ toàn kênh</button></div></aside>`;
 }
 
-/* ---------- Kết nối ---------- */
-function connectView(lib, d, msg) {
-  const fb = d.accounts.facebook, ig = d.accounts.instagram, tt = d.accounts.tiktok;
-  const igN = lib.pages.filter((p) => p.ig_id).length;
-  const card = (code, title, status, ok, detail, warn, btn) => `<div class="pcard"><div style="display:flex;gap:10px;align-items:center">${pf(code, true)}
-      <span class="chn"><b>${title}</b><span class="small" style="color:${ok ? "var(--ok)" : "var(--muted)"}">${status}</span></span></div>
-      <span class="small muted" style="min-height:34px;line-height:1.45">${detail}</span>${warn ? `<span class="warnbox small">${warn}</span>` : ""}${btn}</div>`;
-  const link = (href, l, pri) => `<a class="btn${pri ? " pri" : ""}" href="${appUrl(href)}">${l}</a>`;
-  const stats = lib.stats || {};
-  const mkSel = (id, cur, auto) => `<span class="mkw"><select class="in" data-mk="${esc(id)}" aria-label="Thị trường" style="min-height:30px">${Object.entries(lib.markets).map(([m, l]) => `<option value="${m}" ${cur === m ? "selected" : ""}>${m.toUpperCase()} · ${esc(l)}</option>`).join("")}</select>${auto ? '<span class="small muted auto-h" title="Tự đoán theo tên page — chọn lại để cố định">tự đoán</span>' : ""}</span>`;
-  const tmSel = (id, cur) => `<select class="in" data-tm="${esc(id)}" aria-label="Team" style="min-height:30px"><option value="">Chưa gán</option>${lib.teams.map((t) => `<option ${cur === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>`;
-  const s = lib.status;
-  const rows = lib.pages.map((p) => {
-    const a = stats[`facebook:${p.id}`] || {}, b = stats[`instagram:${p.id}`] || {};
-    return `<tr class="${p.track ? "" : "off"}" data-row="${esc((p.name + " " + (p.ig_name || "")).toLowerCase())}"><td><input type="checkbox" class="chk" data-track="${esc(p.id)}" ${p.track ? "checked" : ""} aria-label="Cào ${esc(p.name)}"></td>
-      <td><span class="chn"><span>${pf("facebook")} <b>${esc(p.name)}</b></span>${p.ig_id ? `<span class="small muted">${pf("instagram")} @${esc(p.ig_name || p.ig_id)}</span>` : ""}</span></td>
-      <td>${mkSel(p.id, p.market, p.market_auto)}</td><td>${tmSel(p.id, (lib.channels.find((c) => c.page_id === p.id) || {}).team || "")}</td>
-      <td class="num mono">${(a.videos || 0) + (b.videos || 0) || "—"}</td><td class="num mono">${k((a.views30 || 0) + (b.views30 || 0))}</td>
-      <td class="small muted">${p.track ? esc((a.last || b.last || "chưa cào").slice(5)) : "Không cào"}</td>
-      <td><button class="btn sm" type="button" data-syncone="${esc(p.id)}" ${p.track && !s.running ? "" : "disabled"}>Cào</button></td></tr>`;
-  }).join("") + (tt.connected ? (() => { const a = stats["tiktok:tiktok"] || {}; const ch = lib.channels.find((c) => c.platform === "tiktok") || {};
-    return `<tr><td><input type="checkbox" class="chk" checked disabled aria-label="Cào TikTok"></td><td><span>${pf("tiktok")} <b>${esc(tt.name)}</b></span></td>
-      <td>${mkSel("tiktok", lib.tiktok_market)}</td><td>${tmSel("tiktok", ch.team || "")}</td><td class="num mono">${a.videos || "—"}</td><td class="num mono">${k(a.views30 || 0)}</td>
-      <td class="small muted">${esc((a.last || "chưa cào").slice(5))}</td><td><button class="btn sm" type="button" data-syncone="tiktok" ${s.running ? "disabled" : ""}>Cào</button></td></tr>`; })() : "");
-  return `${msg ? `<div class="box pad" style="border-color:${msg.startsWith("error") ? "var(--bad)" : "var(--ok)"}">${msg.startsWith("error") ? "Kết nối lỗi: " + esc(msg.slice(6)) : "Đã kết nối thành công."}</div>` : ""}
-    <section class="pcards">
-      ${card("facebook", "Facebook", fb.connected ? `Đã kết nối · ${lib.pages.length} page` : "Chưa kết nối", fb.connected, fb.connected ? "Reels của các Fanpage đã cấp quyền" : "Đăng Reels và cào số liệu các Fanpage",
-        fb.connected && (fb.missing || []).length ? `Facebook chưa cấp quyền: <b class="mono">${fb.missing.map(esc).join(", ")}</b>. Thêm các quyền này trong app Meta › Trường hợp sử dụng, rồi bấm Kết nối lại và cho phép tất cả.` : "",
-        (d.apps.meta ? link("/api/social/meta/connect", fb.connected ? "Kết nối lại" : "Kết nối", !fb.connected || (fb.missing || []).length) : '<span class="chip warn">Thiếu khoá app Meta</span>')
-        + (fb.connected ? '<button class="btn sm" type="button" data-refreshpages>Làm mới danh sách page</button>' : ""))}
-      ${card("instagram", "Instagram", ig.connected || igN ? `Đã kết nối · ${igN} tài khoản` : "Chưa kết nối", ig.connected || igN, "Qua Facebook · tài khoản Business nối với Fanpage", "",
-        fb.connected ? '<span class="small muted">Quản lý qua kết nối Facebook</span>' : '<span class="small muted">Kết nối Facebook trước</span>')}
-      ${card("tiktok", "TikTok", tt.connected ? "Đã kết nối · 1 kênh" : "Chưa kết nối", tt.connected, tt.connected ? `${esc(tt.name)} · gửi video vào hộp thư, bấm đăng trong app` : "Đăng vào hộp thư TikTok và kéo số liệu",
-        "", d.apps.tiktok ? link("/api/social/tiktok/connect", tt.connected ? "Kết nối lại" : "Kết nối", !tt.connected) : '<span class="chip warn">Thiếu khoá app TikTok</span>')}
-      ${card("youtube", "YouTube", "Sắp có", false, "Shorts · cần tạo app Google (YouTube Data API)", "", '<button class="btn" type="button" disabled>Sắp có</button>')}
-      ${card("threads", "Threads", "Sắp có", false, "Cần app Threads API của Meta", "", '<button class="btn" type="button" disabled>Sắp có</button>')}</section>
-    ${fb.connected ? `<details class="box pad"><summary><b>Thiếu page?</b> <span class="small muted">Facebook chỉ cho app thấy những page anh tích lúc đăng nhập</span></summary>
-      <ol class="small" style="line-height:1.7;margin:8px 0;padding-left:18px"><li>Bấm <b>Kết nối lại</b> ở thẻ Facebook, ở bước chọn trang bấm <b>"Chọn tất cả"</b> (hoặc "Tất cả trang hiện tại và trong tương lai"), cả với Instagram.</li>
-        <li>Nếu page nằm trong nhiều Business Manager: vào business.facebook.com › Cài đặt doanh nghiệp › Người dùng › <b>Người dùng hệ thống</b> › thêm tài sản (tất cả page) › <b>Tạo mã truy cập</b> cho app này với các quyền pages_show_list, pages_read_engagement, read_insights, pages_manage_posts, instagram_basic, instagram_manage_insights, instagram_content_publish, rồi dán mã vào đây:</li></ol>
-      <div style="display:flex;gap:8px"><input class="in mono" id="sys-tok" type="password" placeholder="Mã truy cập người dùng hệ thống" autocomplete="off"><button class="btn" type="button" data-systoken>Dùng mã này</button></div></details>` : ""}
-    <section class="box pad rowbox" style="gap:8px"><b style="margin-right:6px">Team</b>
-      ${lib.teams.map((t, i) => `<span class="tchip t${i % 5}">${esc(t)}<span class="mono">${lib.channels.filter((c) => c.team === t && c.platform !== "instagram").length}</span><button type="button" data-rmteam="${esc(t)}" aria-label="Xoá team ${esc(t)}">✕</button></span>`).join("")}
-      <input class="in" id="t-new" placeholder="Tên team mới" style="width:170px;min-height:32px" aria-label="Tên team mới"><button class="btn sm gold" type="button" data-addteam>Thêm</button></section>
-    <section class="box"><div class="sq-day" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">Page &amp; kênh <span class="small muted" style="font-weight:400">${lib.pages.length + (tt.connected ? 1 : 0)} kênh · ${num(lib.rows.length)} video đã cào${lib.synced_at ? " · lần cuối " + esc(lib.synced_at) : ""}</span><input class="in" id="pg-q" type="search" placeholder="Tìm page" style="width:180px;min-height:32px" aria-label="Tìm page"><div style="flex:1"></div>
-      ${s.running ? `<span class="small muted">${esc(s.step)} · ${s.done}/${s.total || "?"}</span><span class="prog"><i style="width:${s.total ? (s.done / s.total) * 100 : 5}%"></i></span>` : ""}
-      <select class="in" id="l-days" style="width:auto;min-height:32px" aria-label="Khoảng thời gian cào">${[[30, "30 ngày"], [90, "90 ngày"], [180, "6 tháng"], [365, "1 năm"], [730, "2 năm"]].map(([v, l]) => `<option value="${v}" ${+d.settings.library_days === v ? "selected" : ""}>${l} gần nhất</option>`).join("")}</select>
-      <button class="btn pri" type="button" data-syncall ${s.running ? "disabled" : ""}>${s.running ? "Đang cào…" : "Cào tất cả page đã chọn"}</button></div>
-      ${s.errors.length ? `<details style="padding:0 16px 10px"><summary class="small" style="color:var(--warn)">${s.errors.length} lỗi lần cào gần nhất</summary><div class="small mono muted">${s.errors.map(esc).join("<br>")}</div></details>` : ""}
-      ${rows ? `<div class="tscroll"><table class="ctab"><thead><tr><th>Cào</th><th>Page / kênh</th><th>Thị trường</th><th>Team</th><th class="num">Video</th><th class="num">View 30 ngày</th><th>Cào lần cuối</th><th><span class="sr">Thao tác</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : '<div class="empty">Kết nối Facebook hoặc TikTok để hiện danh sách page.</div>'}</section>
-    <details class="box pad"><summary><b>Hướng dẫn tạo app</b></summary><ol class="small" style="line-height:1.7;margin:8px 0 0;padding-left:18px">
-      <li><b>Meta:</b> developers.facebook.com › app loại Business › thêm Facebook Login for Business. Use cases: thêm pages_show_list, pages_read_engagement, read_insights, pages_manage_posts, instagram_basic, instagram_manage_insights, instagram_content_publish. Redirect URI: <code class="mono">${esc(d.redirects.meta)}</code>. App ID / Secret vào Cài đặt › Khoá kết nối.</li>
-      <li><b>TikTok:</b> developers.tiktok.com › Login Kit + Content Posting API, scopes user.info.basic, video.upload, video.publish, video.list. Redirect URI: <code class="mono">${esc(d.redirects.tiktok)}</code>.</li></ol>
-      ${fb.connected || tt.connected ? `<div style="display:flex;gap:8px;margin-top:10px">${fb.connected ? '<button class="btn sm danger" type="button" data-disc="meta">Ngắt Facebook / Instagram</button>' : ""}${tt.connected ? '<button class="btn sm danger" type="button" data-disc="tiktok">Ngắt TikTok</button>' : ""}</div>` : ""}</details>`;
-}
-
 /** Báo cáo PDF: posting + performance (current date range / market) and Meta Ads, with charts and short findings. */
 async function makeReport(lib) {
   const [df, dt] = DR.resolve(st.perfDr);
@@ -692,11 +636,10 @@ export async function render(view, ctx) {
   const el = document.createElement("div");
   el.style.cssText = "display:flex;flex-direction:column;min-height:100vh";
   view.replaceChildren(el);
-  let msg = "";
   const p0 = ctx.params?.[0];
-  if (p0 === "connect") { st.tab = "connect"; msg = ctx.params[2] || ""; }
-  else if (p0 === "perf") { st.tab = "perf"; st.key = ctx.params[1] || null; }
+  if (p0 === "perf") { st.tab = "perf"; st.key = ctx.params[1] || null; }
   else if (TABS[p0]) st.tab = p0;
+  if (!TABS[st.tab]) st.tab = "posts";
   st.psku = p0 === "posts" && ctx.params[1] === "sku" ? (ctx.params[2] || "").toUpperCase() : "";
   let [d, lib] = await Promise.all([api.social(), api.socialLibrary()]);
   let item = null, lessons = null, ex = null;
@@ -711,7 +654,7 @@ export async function render(view, ctx) {
   const adsSync = () => { const x = Object.values(AD).find((v) => v && v.status); return x ? (x.status.running ? `Đang lấy · ${esc(x.status.step || "")}` : x.at ? `Cập nhật ${esc(x.at.slice(5))} · tự làm mới mỗi 3 giờ` : "") : ""; };
   const syncText = () => (lib.status.running ? `Đang cào ${lib.status.done}/${lib.status.total || "?"} · số liệu hiện dần`
     : lib.synced_at ? "Cào lần cuối " + esc(lib.synced_at.slice(5)) + " · tự cào mỗi 6 giờ" : "Chưa cào dữ liệu");
-  const body = () => (st.tab === "posts" ? postsView(lib) : st.tab === "schedule" ? scheduleView(lib, d, ex) : st.tab === "perf" ? perfView(lib, item, lessons, winViews()) : st.tab === "ads" ? adsView() : connectView(lib, d, msg));
+  const body = () => (st.tab === "posts" ? postsView(lib) : st.tab === "schedule" ? scheduleView(lib, d, ex) : st.tab === "perf" ? perfView(lib, item, lessons, winViews()) : adsView());
   const right = () => (st.tab === "perf" ? `<span class="small muted">Bài học đang áp dụng · <b>${lessons ? lessons.lessons.filter((l) => l.active).length : "…"}</b></span><button class="btn" type="button" data-showless>Xem bài học</button>`
     : st.tab === "ads" ? `<span class="small muted" id="a-sync">${adsSync()}</span><button class="btn" type="button" data-adsrefresh>Làm mới</button>`
     : st.tab === "posts" ? `<span class="small muted" id="p-sync">${syncText()}</span><button class="btn" type="button" data-csv>Tải CSV</button>`
@@ -745,8 +688,7 @@ export async function render(view, ctx) {
   });
   ctx.setUpdate?.(async (params) => {                    // sub-tab links switch in place: data kept, no reload flash
     const t = params[0];
-    if (t === "connect") { st.tab = "connect"; msg = params[2] || ""; }
-    else if (t === "perf") { st.tab = "perf"; if (params[1] !== undefined) st.key = params[1] || null; }
+    if (t === "perf") { st.tab = "perf"; if (params[1] !== undefined) st.key = params[1] || null; }
     else if (TABS[t]) st.tab = t;
     else return false;
     st.psku = t === "posts" && params[1] === "sku" ? (params[2] || "").toUpperCase() : (t === "posts" ? "" : st.psku);
@@ -884,14 +826,6 @@ export async function render(view, ctx) {
       if (t.dataset.lpin) { const l = lessons.lessons.find((x) => x.id === t.dataset.lpin); lessons = await api.socialLesson(l.id, { pinned: !l.pinned }); paint(); return; }
       if (t.dataset.ldel) { lessons = await api.socialLesson(t.dataset.ldel, { delete: true }); paint(); return; }
       if (t.hasAttribute("data-learn")) { t.disabled = true; t.textContent = "Đang phân tích toàn kênh…"; const r = await api.socialLearn(); toast(r.skipped || `Đã rút ${r.lessons} bài học`, !!r.skipped); lessons = await api.socialInsights().then((x) => x.lessons); paint(); return; }
-      // connect
-      if (t.hasAttribute("data-syncall")) { lib.status = await api.socialLibrarySync(+val("#l-days")); paint(); watch(); return; }
-      if (t.dataset.syncone) { lib.status = await api.socialLibrarySync(+val("#l-days"), [t.dataset.syncone]); paint(); watch(); return; }
-      if (t.hasAttribute("data-refreshpages")) { t.disabled = true; t.textContent = "Đang đọc page…"; await api.socialRefreshPages(); await reload(); toast(`Có ${lib.pages.length} page`); return; }
-      if (t.hasAttribute("data-systoken")) { await api.socialSysToken(val("#sys-tok")); await reload(); toast(`Đã dùng mã hệ thống · ${lib.pages.length} page`); return; }
-      if (t.hasAttribute("data-addteam")) { const v = (val("#t-new") || "").trim(); if (!v) return; await api.socialTeams([...lib.teams, v]); toast("Đã thêm team"); await reload(); return; }
-      if (t.dataset.rmteam) { await api.socialTeams(lib.teams.filter((x) => x !== t.dataset.rmteam)); await reload(); return; }
-      if (t.dataset.disc) { await api.socialDisconnect(t.dataset.disc); toast("Đã ngắt kết nối"); await reload(); return; }
     } catch (err) { toast(err.message, true); }
   });
   el.addEventListener("input", (e) => {
@@ -904,7 +838,6 @@ export async function render(view, ctx) {
       st._qT = setTimeout(() => { paint(); const q = el.querySelector("#" + id); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 250);
     }
     if (e.target.id === "ex-q") { st.exQ = e.target.value; clearTimeout(st._exT); st._exT = setTimeout(() => { paintMain(); const q = el.querySelector("#ex-q"); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 300); }
-    if (e.target.id === "pg-q") { const q = e.target.value.trim().toLowerCase(); el.querySelectorAll("tr[data-row]").forEach((r) => { r.style.display = !q || r.dataset.row.includes(q) ? "" : "none"; }); }
     if (e.target.dataset.mix) { const tot = [...el.querySelectorAll("[data-mix]")].reduce((s, i) => s + +i.value, 0) || 1;
       el.querySelectorAll("[data-mix]").forEach((i) => { i.nextElementSibling.textContent = Math.round((+i.value / tot) * 100) + "%"; }); }
   });
@@ -923,20 +856,6 @@ export async function render(view, ctx) {
       if (t.hasAttribute("data-exday")) { st.exDay = t.value; st.exShown = 48; paintMain(); return; }
       if (t.hasAttribute("data-exfam")) { st.exFam = t.value; st.exShown = 48; paintMain(); return; }
       if (t.hasAttribute("data-exstate")) { st.exState = t.value; st.exShown = 48; paintMain(); return; }
-      // connect: save in place — the table does not redraw or jump
-      if (t.dataset.mk) {
-        await api.socialPageMarket(t.dataset.mk, { market: t.value });
-        t.parentElement.querySelector(".auto-h")?.remove();
-        const pg = lib.pages.find((x) => x.id === t.dataset.mk); if (pg) { pg.market = t.value; pg.market_auto = false; }
-        lib.channels.filter((c) => c.page_id === t.dataset.mk).forEach((c) => { c.market = t.value; });
-        toast(`Đã gán thị trường ${t.value.toUpperCase()}`); return;
-      }
-      if (t.dataset.tm !== undefined) {
-        await api.socialPageMarket(t.dataset.tm, { team: t.value });
-        lib.channels.filter((c) => c.page_id === t.dataset.tm).forEach((c) => { c.team = t.value; });
-        toast(t.value ? `Đã gắn ${t.value}` : "Đã bỏ team"); return;
-      }
-      if (t.dataset.track) { await api.socialPageMarket(t.dataset.track, { track: t.checked }); t.closest("tr").classList.toggle("off", !t.checked); const pg = lib.pages.find((x) => x.id === t.dataset.track); if (pg) pg.track = t.checked; return; }
     } catch (err) { toast(err.message, true); }
   });
   ctx.setShow?.(() => { if (st.tab === "schedule" && !st.editPost) refreshPosts(); });

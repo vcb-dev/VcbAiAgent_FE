@@ -1,10 +1,11 @@
-// Cài đặt: AI viết & dựng (mức chất lượng, prompt) · Giọng đọc · Khoá kết nối · Máy & mạng.
+// Cài đặt: AI viết & dựng · Giọng đọc · Khoá kết nối · Kết nối kênh MXH · Máy & mạng.
 // "AI trong hệ thống" lists every AI the app uses and for which job; the text AIs (main + backup) are chosen there.
 import { api, esc, toast } from "./admin-api.js";
 import * as DR from "./date-range.js";
 import { isVi } from "../i18n.js";
+import { connectView, handleConnectClick, handleConnectChange, handleConnectInput } from "./screen-connect.js";
 
-const SECS = { ai: "AI viết & dựng", cost: "Chi phí AI", voice: "Giọng đọc", web: "Minh hoạ từ mạng", keys: "Khoá kết nối", blocks: "Khối workflow", system: "Máy & mạng" };
+const SECS = { ai: "AI viết & dựng", cost: "Chi phí AI", voice: "Giọng đọc", web: "Minh hoạ từ mạng", keys: "Khoá kết nối", connect: "Kết nối kênh", blocks: "Khối workflow", system: "Máy & mạng" };
 const BLOCK_ROLE = { trig: "Theo lịch", lang: "Ngôn ngữ & giọng", music: "Nhạc nền", content: "Chọn content", footage: "Footage A4", build: "Tạo job dựng", review: "Duyệt nháp", g2: "Duyệt video", editor: "Telegram", publish: "Lên lịch đăng", post: "Đăng bài", check: "AI chấm điểm", stats: "Kéo số liệu", learn: "Rút bài học" };
 
 // money: USD with enough decimals for tiny per-call costs, VND rounded
@@ -381,6 +382,8 @@ export async function render(view, ctx) {
   const el = document.createElement("div");
   el.style.cssText = "display:flex;flex-direction:column;min-height:100vh";
   view.replaceChildren(el);
+  if (ctx.params?.[0] && SECS[ctx.params[0]]) sec = ctx.params[0];
+  let connectMsg = ctx.params?.[0] === "connect" ? (ctx.params[2] || "") : "";
   const saveU = (b) => api.aiUsageSave(b).then(() => api.aiUsage(DR.query(costDr)));
   DR.wire(el, (_, r) => { costDr = r; usage = null; paint(); loadUsage(); });
   let s = await api.aiSettings();
@@ -396,19 +399,33 @@ export async function render(view, ctx) {
   loadUsage();
   let blk = null;
   api.workflowBlocks().then((x) => { blk = x; if (sec === "blocks") paint(); }).catch(() => {});
-  const body = () => (sec === "cost" ? costSec(usage) : sec === "ai" ? aiSec(s, mm, omni) : sec === "voice" ? voiceSec(omni, s, mm) : sec === "keys" ? keysSec(s) : sec === "web" ? webSec(wm) : sec === "blocks" ? blocksSec(blk) : systemSec(sy, ex));
-  const dotOk = { cost: () => !(usage?.providers || []).some((p) => p.low), ai: () => Object.values(s.available).every(Boolean), voice: () => omni.ready || mm?.active, keys: () => s.keys.ANTHROPIC_API_KEY?.set || s.keys.DEEPSEEK_API_KEY?.set, web: () => !wm || (wm.gemini && wm.settings.auto), blocks: () => !!(blk && blk.blocks && blk.blocks.length), system: () => true };
+  let socialD = null, socialLib = null;
+  const loadConnect = () => Promise.all([api.social(), api.socialLibrary()]).then(([d, lib]) => { socialD = d; socialLib = lib; if (sec === "connect") paint(); }).catch((err) => toast(err.message, true));
+  if (sec === "connect") loadConnect();
+  let syncT = 0;
+  const watch = () => { clearTimeout(syncT); syncT = setTimeout(async () => { socialLib = await api.socialLibrary(); if (sec === "connect") paint(); if (socialLib.status.running) watch(); else { toast(`Cào xong · ${socialLib.rows.length} video`); paint(); } }, 2500); };
+  const connectBag = () => ({ lib: socialLib, d: socialD, paint, watch, async reload() { await loadConnect(); } });
+  const body = () => (sec === "cost" ? costSec(usage) : sec === "ai" ? aiSec(s, mm, omni) : sec === "voice" ? voiceSec(omni, s, mm) : sec === "keys" ? keysSec(s) : sec === "connect" ? connectView(socialLib, socialD, connectMsg) : sec === "web" ? webSec(wm) : sec === "blocks" ? blocksSec(blk) : systemSec(sy, ex));
+  const dotOk = { cost: () => !(usage?.providers || []).some((p) => p.low), ai: () => Object.values(s.available).every(Boolean), voice: () => omni.ready || mm?.active, keys: () => s.keys.ANTHROPIC_API_KEY?.set || s.keys.DEEPSEEK_API_KEY?.set, connect: () => !!(socialD?.accounts?.facebook?.connected || socialD?.accounts?.tiktok?.connected), web: () => !wm || (wm.gemini && wm.settings.auto), blocks: () => !!(blk && blk.blocks && blk.blocks.length), system: () => true };
   const paint = () => {
     el.innerHTML = `<header class="ph-bar"><h1>Cài đặt</h1></header>
       <div class="split"><nav class="snav" aria-label="Mục cài đặt">${Object.entries(SECS).map(([k, v]) => `<button type="button" data-sec="${k}" aria-current="${sec === k ? "page" : "false"}">${v}<span class="dot ${dotOk[k]() ? "ok" : "warn"}"></span></button>`).join("")}</nav>
-        <main class="sbody${sec === "cost" ? " wide" : ""}" id="sbody">${body()}</main></div>`;
+        <main class="sbody${sec === "cost" || sec === "connect" ? " wide" : ""}" id="sbody">${body()}</main></div>`;
   };
   paint();
   const refresh = async () => { s = await api.aiSettings(); paint(); };
   api.system().then((x) => { sy = x; if (sec === "system") paint(); }).catch(() => {});
   api.voiceStatus().then((v) => { omni = v.omni || {}; mm = v.minimax; paint(); }).catch(() => {});
   const t = setInterval(() => { if (sec === "voice" && !omni.ready) api.voiceStatus().then((v) => { omni = v.omni || {}; mm = v.minimax; paint(); }).catch(() => {}); }, 8000);
-  ctx.setCleanup(() => clearInterval(t));
+  ctx.setCleanup(() => { clearInterval(t); clearTimeout(syncT); });
+  ctx.setUpdate?.(async (params) => {
+    if (!params[0] || !SECS[params[0]]) return false;
+    sec = params[0];
+    connectMsg = params[0] === "connect" ? (params[2] || "") : "";
+    if (sec === "connect") await loadConnect();
+    paint();
+    return true;
+  });
 
   el.addEventListener("change", async (e) => {
     try {
@@ -433,9 +450,10 @@ export async function render(view, ctx) {
       if (e.target.hasAttribute("data-wsai")) { wm = await api.webMediaSave({ ai_images: e.target.value }); toast("Đã lưu"); }
       if (e.target.dataset.wsrule) { wm = await api.webMediaSave({ [e.target.dataset.wsrule]: e.target.checked }); toast("Đã lưu"); }
       if (e.target.dataset.wsnum) { const v = Number(String(e.target.value).replace(/\D/g, "")); if (v > 0) { wm = await api.webMediaSave({ [e.target.dataset.wsnum]: v }); toast("Đã lưu"); } paint(); }
+      if (await handleConnectChange(e.target, connectBag())) return;
     } catch (err) { toast(err.message, true); }
   });
-  el.addEventListener("input", (e) => { if (e.target.id === "mm-speed") el.querySelector("#mm-speed-v").textContent = `${e.target.value}×`; });
+  el.addEventListener("input", (e) => { if (e.target.id === "mm-speed") el.querySelector("#mm-speed-v").textContent = `${e.target.value}×`; handleConnectInput(e); });
   el.addEventListener("input", (e) => { if (e.target.id === "sys-prompt") el.querySelector("#pr-count").textContent = `${e.target.value.length.toLocaleString(globalThis.VCB_LOC || "vi-VN")} ký tự`; });
   el.addEventListener("change", (e) => {
     const key = e.target.dataset.mprov;                // "<task>:<0 main | 1 backup>"
@@ -452,11 +470,15 @@ export async function render(view, ctx) {
     if (!btn) return;
     try {
       if (btn.dataset.sec) {
-        sec = btn.dataset.sec; paint();
+        sec = btn.dataset.sec; connectMsg = "";
+        history.replaceState(null, "", sec === "connect" ? "#/ai/connect" : "#/ai");
+        paint();
         if (sec === "cost") loadUsage();
+        if (sec === "connect") loadConnect();
         if (sec === "blocks") api.workflowBlocks().then((x) => { blk = x; paint(); }).catch((err) => toast(err.message, true));
         return;
       }
+      if (await handleConnectClick(btn, el, connectBag())) return;
       if (btn.id === "blk-add") {
         const v = await groupEditorPopup(el, {
           mode: "groups",

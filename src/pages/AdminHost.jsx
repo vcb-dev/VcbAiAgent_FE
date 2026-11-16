@@ -25,6 +25,11 @@ const boot = { current: null };
 
 async function openScreen(view, bar, state, pathname) {
   const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] === "social" && parts[1] === "connect") {
+    const rest = parts.slice(2).map(encodeURIComponent).join("/");
+    location.replace(`#/ai/connect${rest ? `/${rest}` : ""}`);
+    return;
+  }
   const name = ALIAS[parts[0]] || parts[0] || "content";
   const key = SCREENS[name] ? name : "content";
   const params = parts.slice(1).map(decodeURIComponent);

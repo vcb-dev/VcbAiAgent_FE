@@ -32,7 +32,7 @@ export async function render(view) {
   const paint = () => {
     el.innerHTML = `<header class="ph-bar"><h1>Thêm</h1></header><div class="page more">
       <div class="tiles">${TILES.map(([k, l, h, p]) => `<a class="tile" href="${h}"><span class="ti">${ico(p)}</span>${l}${k === "review" && badges.g2 ? `<span class="tnb">${badges.g2}</span>` : ""}</a>`).join("")}</div>
-      <section class="box"><div class="mrow head"><b>Kết nối kênh</b><a class="btn sm" href="/social/connect">Quản lý</a></div>
+      <section class="box"><div class="mrow head"><b>Kết nối kênh</b><a class="btn sm" href="#/ai/connect">Quản lý</a></div>
         ${conn.map(([c, n, s, ok]) => `<div class="mrow"><span class="pfb ${c.toLowerCase()}">${c}</span><span class="grow"><b>${n}</b><span class="small" style="color:var(${ok ? "--ok" : "--muted"})">${esc(s)}</span></span></div>`).join("")}</section>
       <section class="box"><div class="mrow"><b class="grow">Giao diện</b><div class="seg">
         <button type="button" data-th="dark" aria-pressed="${theme() === "dark"}">Tối</button><button type="button" data-th="light" aria-pressed="${theme() === "light"}">Sáng</button></div></div>

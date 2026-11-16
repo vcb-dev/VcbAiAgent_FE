@@ -88,7 +88,7 @@ async function schedModalHtml(names, langs) {
     <div style="display:grid;gap:4px;max-height:300px;overflow:auto" id="s-chlist">${chs.map((c) => `<label data-chname="${esc(c.name.toLowerCase())}" data-chlang="${esc(c.lang)}" style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" class="chk" data-sch="${esc(c.cid)}" ${langs.has(c.lang) ? "checked" : ""}>
       <span class="pfchip" style="background:${(PFC[c.platform] || PFC.facebook)[1]}">${(PFC[c.platform] || PFC.facebook)[0]}</span><span style="flex:1">${esc(c.name)}</span>
       <span class="chip mono">${esc((c.market || "").toUpperCase())}</span>${c.team ? `<span class="small muted">${esc(c.team)}</span>` : ""}</label>`).join("")}</div>`
-      : '<div class="small" style="color:var(--warn)">Chưa kết nối kênh nào — vào Đăng &amp; hiệu quả › Kết nối.</div>'}
+      : '<div class="small" style="color:var(--warn)">Chưa kết nối kênh nào — vào Cài đặt › Kết nối kênh.</div>'}
     <label class="f" for="s-when">Giờ đăng</label><input class="in mono" id="s-when" type="datetime-local" style="width:auto">
     <div class="small muted">Để trống = mỗi video vào khung giờ trống tiếp theo theo lịch của từng kênh (Đăng &amp; hiệu quả › Lịch đăng).</div>
     <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" type="button" data-sclose>Huỷ</button><button class="btn pri" type="button" data-sgo>Xếp lịch</button></div></div>`;

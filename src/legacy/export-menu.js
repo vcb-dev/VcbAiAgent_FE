@@ -125,7 +125,7 @@ function results() {
 
 function chanList() {
   if (X.chans == null) return '<div class="small muted is-busy">Đang tải danh sách kênh…</div>';
-  if (!X.chans.length) return '<div class="small" style="color:var(--collected)">Chưa kết nối kênh nào — vào Đăng &amp; hiệu quả › Kết nối.</div>';
+  if (!X.chans.length) return '<div class="small" style="color:var(--collected)">Chưa kết nối kênh nào — vào Cài đặt › Kết nối kênh.</div>';
   const q = X.chq.trim().toLowerCase();
   return `<input class="xp-in" id="xp-chq" type="search" placeholder="Tìm kênh" value="${esc(X.chq)}" aria-label="Tìm kênh">
     <div class="xp-chs">${X.chans.filter((c) => !q || c.name.toLowerCase().includes(q)).map((c) => { const pf = PFC[c.platform] || PFC.facebook; return `<label class="xp-ch"><input type="checkbox" data-ch="${esc(c.cid)}" ${X.ch.has(c.cid) ? "checked" : ""}>
