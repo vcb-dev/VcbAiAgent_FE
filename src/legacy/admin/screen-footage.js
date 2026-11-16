@@ -381,7 +381,8 @@ function stepBoards(clips) {
   extraFolders.forEach((f) => {
     const idx = Number(f.idx) || 999;
     const label = String(f.label || "").trim();
-    if (!label) return;
+    if (!label || label === "Chưa xếp") return;
+    if ([...by.values()].some((r) => r.label === label)) return;
     const key = `${idx}|${label}`;
     if (!by.has(key)) by.set(key, { idx, label, tag: "", clips: [] });
   });
@@ -401,7 +402,6 @@ function craftBoard(lib) {
   const rows = stepBoards(boardClips(lib));
   const cm = st.composer || {};
   const tools = `<div class="ftools">
-      <button type="button" class="btn" data-back-origin="1">← Nguồn</button>
       <button type="button" class="pill" data-board="index" aria-pressed="${st.board === "index"}">Theo số thứ mục</button>
       <button type="button" class="pill" data-board="tag" aria-pressed="${st.board === "tag"}">Gom theo tag công đoạn</button>
       <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
@@ -546,10 +546,21 @@ export async function render(view, ctx) {
     lib = mergeLib();
     if (st.sku && isCraftOrigin()) {
       extraFolders = (await api.emptyFolders(st.sku, st.origin).catch(() => ({ folders: [] }))).folders || [];
+      const clipLabels = new Set(skuClips(lib).map((c) => (unsorted(c) && !c.step_label ? "Chưa xếp" : (c.step_label || STEP_VI[c.craft_step] || "Chưa xếp"))));
+      const cleaned = extraFolders.filter((f) => {
+        const label = String(f.label || "").trim();
+        return label && label !== "Chưa xếp" && !clipLabels.has(label);
+      });
+      if (cleaned.length !== extraFolders.length) {
+        extraFolders = cleaned;
+        await api.saveEmptyFolders(st.sku, st.origin, extraFolders).catch(() => {});
+      }
     } else extraFolders = [];
   };
   const persistFolders = async () => {
-    extraFolders = stepBoards(boardClips(lib)).map((r) => ({ idx: r.idx, label: r.label }));
+    extraFolders = stepBoards(boardClips(lib))
+      .filter((r) => !r.clips.length && r.label !== "Chưa xếp")
+      .map((r) => ({ idx: r.idx, label: r.label }));
     try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
   };
   const folderClips = (idx, label) => boardClips(lib).filter((c) => Number(c.step_index || 999) === Number(idx)
