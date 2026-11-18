@@ -430,7 +430,7 @@ function craftBoard(lib) {
       ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
       <span class="muted small">Mỗi video chỉ lấy source của một lần quay, không trộn.</span>
     </div>
-    <p class="muted small" style="margin:0">Tick ô vuông, rồi kéo <b>một clip đã tick</b> sang hàng công đoạn khác — cả cụm đi theo. Chưa tick thì kéo từng clip.</p>
+    <p class="muted small" style="margin:0">Tick các clip, rồi <b>giữ và kéo xuống</b> hàng công đoạn khác — cả cụm đã tick đi theo.</p>
     <div class="fpick" id="f-picked" ${st.checked.size ? "" : "hidden"}>Đã chọn <b id="f-picked-n">${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
       <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
