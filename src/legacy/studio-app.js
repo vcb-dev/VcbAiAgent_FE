@@ -107,7 +107,9 @@ export async function startStudio() {
   api.librarySkus().then((snap) => {
     if (!snap?.rows?.length) return;
     applyBoot({ products: snap.rows.map((r) => ({
-      sku: r.sku, name: r.name || r.sku, clips: r.clips || 0, steps: [], step_labels: [], ready: true,
+      sku: r.sku, name: r.name || r.sku, clips: r.clips || 0, ready: true,
+      steps: r.steps || [], step_labels: r.step_labels || [], step_detail: r.step_detail || [],
+      has_final: !!r.has_final, final_clips: r.final_clips || 0, hero_clips: r.hero_clips || 0,
     })) });
   }).catch(() => {});
   await applyDeepLink();

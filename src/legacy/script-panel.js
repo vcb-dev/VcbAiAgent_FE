@@ -501,6 +501,7 @@ function paintProductHint() {
 let _metaSeq = 0;
 async function fillProductMeta(sku) {
   if (!sku) return;
+  const have = (productOf()?.step_detail || []).length;
   const seq = ++_metaSeq;
   try {
     const { clips } = await api.library({ sku, limit: 400 });
@@ -509,7 +510,7 @@ async function fillProductMeta(sku) {
     store.boot.library = [...(clips || []), ...keep];
     store.boot._libSku = sku;
     const p = productOf();
-    if (p) Object.assign(p, metaFromClips(clips || []));
+    if (p && (clips || []).length && !have) Object.assign(p, metaFromClips(clips || []));
     paintProductHint();
     paintA4();
   } catch {
@@ -572,22 +573,22 @@ export async function initScriptPanel() {
     if (!w.gemini) $("ill-ai-sub").textContent = "Cần khoá Gemini ở AI › Cài đặt";
     illusHint();
   }).catch(() => {});
-  try {
-    const [lib, vs] = await Promise.all([api.content(), api.voiceStatus()]);
-    st.items = lib.items;
-    st.omni = vs.omni;
-    st.minimax = vs.minimax;
-  } catch { st.items = []; }
-  contentOptions();
+  api.content().then((lib) => {
+    st.items = lib.items || [];
+    contentOptions();
+    const q = new URLSearchParams(location.search);
+    const want = q.get("content") && st.items.find((c) => c.id === q.get("content"));
+    const first = want || st.items.find((c) => c.status === "approved") || st.items[0];
+    if (first && !$("content-select").value) pickContent(first.id);
+  }).catch(() => { st.items = []; contentOptions(); });
+  api.voiceStatus().then((vs) => { st.omni = vs.omni; st.minimax = vs.minimax; paintVoice(); }).catch(() => {});
   const poll = setInterval(async () => {
     if (st.minimax?.voices?.length) return clearInterval(poll);
     await refreshVoices();
     if (st.minimax?.voices?.length) clearInterval(poll);
   }, 5000);
+  paintVoice();
   const q = new URLSearchParams(location.search);
-  const want = q.get("content") && st.items.find((c) => c.id === q.get("content"));
-  const first = want || st.items.find((c) => c.status === "approved") || st.items[0];
-  if (first) { $("content-select").value = first.id; pickContent(first.id); } else paintVoice();
   if (q.get("sku") && store.boot.products.some((p) => p.sku === q.get("sku"))) { $("product-select").value = q.get("sku"); showSteps(); }
 }
 
