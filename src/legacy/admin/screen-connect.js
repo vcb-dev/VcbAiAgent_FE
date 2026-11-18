@@ -11,7 +11,9 @@ export function connectView(lib, d, msg) {
   if (!lib || !d) return '<div class="empty is-busy">Đang tải kết nối kênh…</div>';
   const fb = d.accounts.facebook, ig = d.accounts.instagram, tt = d.accounts.tiktok;
   const igN = lib.pages.filter((p) => p.ig_id).length;
-  const fbOk = fb.connected && !(fb.missing || []).length;
+  const nPage = lib.pages.length || fb.page_count || 0;
+  const fbUser = fb.user_name || fb.name || "";
+  const fbOk = fb.connected && !(fb.missing || []).length && nPage > 0;
   const card = (code, title, status, ok, detail, warn, btn) => `<div class="pcard"><div style="display:flex;gap:10px;align-items:center">${pf(code, true)}
       <span class="chn"><b>${title}</b><span class="small" style="color:${ok ? "var(--ok)" : "var(--muted)"}">${status}</span></span></div>
       <span class="small muted" style="min-height:34px;line-height:1.45">${detail}</span>${warn ? `<span class="warnbox small">${warn}</span>` : ""}${btn}</div>`;
@@ -32,28 +34,29 @@ export function connectView(lib, d, msg) {
     return `<tr><td><input type="checkbox" class="chk" checked disabled aria-label="Cào TikTok"></td><td><span>${pf("tiktok")} <b>${esc(tt.name)}</b></span></td>
       <td>${mkSel("tiktok", lib.tiktok_market)}</td><td>${tmSel("tiktok", ch.team || "")}</td><td class="num mono">${a.videos || "—"}</td><td class="num mono">${k(a.views30 || 0)}</td>
       <td class="small muted">${esc((a.last || "chưa cào").slice(5))}</td><td><button class="btn sm" type="button" data-syncone="tiktok" ${s.running ? "disabled" : ""}>Cào</button></td></tr>`; })() : "");
-  return `${msg ? `<div class="box pad" style="border-color:${msg.startsWith("error") ? "var(--bad)" : "var(--ok)"}">${msg.startsWith("error") ? "Kết nối lỗi: " + esc(msg.slice(6)) : "Đã kết nối thành công. Chọn tất cả page lúc đăng nhập thì danh sách bên dưới là toàn bộ kênh."}</div>` : ""}
-    <section class="box pad" style="margin:0 0 12px"><b>Đăng bài</b>
-      <p class="small muted" style="margin:6px 0 0;line-height:1.55">Facebook Reels và Instagram Reels đăng thẳng khi đã kết nối và app Meta đã cấp quyền <span class="mono">pages_manage_posts</span> + <span class="mono">instagram_content_publish</span>. TikTok gửi vào hộp thư app (bấm Đăng trong TikTok) trừ khi app đã được TikTok duyệt đăng trực tiếp. YouTube / Threads chưa mở.</p>
-      <p class="small" style="margin:8px 0 0">${fbOk ? '<span class="chip ok">Facebook sẵn sàng đăng</span>' : fb.connected ? '<span class="chip warn">Facebook thiếu quyền đăng — kết nối lại</span>' : '<span class="chip">Facebook chưa kết nối</span>'}
-        ${ig.connected || igN ? '<span class="chip ok">Instagram qua Fanpage</span>' : '<span class="chip">Instagram chưa có</span>'}
-        ${tt.connected ? '<span class="chip ok">TikTok · hộp thư</span>' : '<span class="chip">TikTok chưa kết nối</span>'}</p></section>
+  const okMsg = msg && !msg.startsWith("error")
+    ? `Đã kết nối tài khoản${fbUser ? " " + fbUser : ""} · ${nPage} Fanpage${igN ? ` · ${igN} Instagram` : ""}.`
+    : "";
+  return `${msg ? `<div class="box pad" style="border-color:${msg.startsWith("error") ? "var(--bad)" : "var(--ok)"}">${msg.startsWith("error") ? "Kết nối lỗi: " + esc(msg.slice(6)) : esc(okMsg)}</div>` : ""}
+    <section class="fb-banner">
+      <div class="fb-banner-h">${pf("facebook", true)}<div><b>Kết nối Facebook</b>
+        <span>Đăng nhập tài khoản Facebook quản trị — hệ thống lấy toàn bộ Fanpage và Instagram gắn với page (như CQA).</span></div></div>
+      <div class="fb-banner-a">
+        ${d.apps.meta ? link("/api/social/meta/connect", fb.connected ? "Kết nối lại Facebook" : "Kết nối Facebook", true) : '<span class="chip warn">Thiếu META_APP_ID / SECRET · Cài đặt › Khoá kết nối</span>'}
+        ${fb.connected ? '<button class="btn" type="button" data-refreshpages>Cập nhật kênh</button>' : ""}
+        ${fb.connected ? '<button class="btn sm danger" type="button" data-disc="meta">Ngắt Facebook</button>' : ""}
+      </div>
+      ${fb.connected ? `<div class="fb-banner-ok">Đã kết nối${fbUser ? `: <b>${esc(fbUser)}</b>` : ""} · <b>${nPage}</b> Fanpage${igN ? ` · <b>${igN}</b> Instagram` : ""}${fbOk ? "" : " · chưa lấy được page, bấm Kết nối lại"}</div>`
+        : '<p class="small" style="margin:0;opacity:.9">Chưa kết nối — bấm nút trên, đăng nhập Facebook, không cần chọn từng page.</p>'}
+      ${fb.connected && (fb.missing || []).length ? `<div class="warnbox small">Thiếu quyền: <b class="mono">${fb.missing.map(esc).join(", ")}</b>. Thêm trong app Meta › Quyền, rồi Kết nối lại.</div>` : ""}
+    </section>
     <section class="pcards">
-      ${card("facebook", "Facebook", fb.connected ? `Đã kết nối · ${lib.pages.length} page` : "Chưa kết nối", fb.connected, fb.connected ? "Reels của các Fanpage đã cấp quyền" : "Đăng nhập Facebook, chọn tất cả Fanpage để lấy hết kênh",
-        fb.connected && (fb.missing || []).length ? `Facebook chưa cấp quyền: <b class="mono">${fb.missing.map(esc).join(", ")}</b>. Thêm các quyền này trong app Meta › Trường hợp sử dụng (và Login configuration nếu dùng Config ID), rồi bấm Kết nối lại và cho phép tất cả.` : "",
-        (d.apps.meta ? link("/api/social/meta/connect", fb.connected ? "Kết nối lại" : "Kết nối Facebook", !fb.connected || (fb.missing || []).length)
-          : '<span class="chip warn">Thiếu khoá app Meta · Cài đặt › Khoá kết nối</span>')
-        + (fb.connected ? '<button class="btn sm" type="button" data-refreshpages>Làm mới danh sách page</button>' : ""))}
-      ${card("instagram", "Instagram", ig.connected || igN ? `Đã kết nối · ${igN} tài khoản` : "Chưa kết nối", ig.connected || igN, "Qua Facebook · tài khoản Business nối với Fanpage", "",
-        fb.connected ? '<span class="small muted">Quản lý qua kết nối Facebook</span>' : '<span class="small muted">Kết nối Facebook trước</span>')}
+      ${card("instagram", "Instagram", igN ? `Theo Fanpage · ${igN} tài khoản` : "Theo Fanpage", !!igN, "Tự lấy khi Fanpage đã gắn Instagram Professional — không cần kết nối riêng", "", fb.connected ? '<span class="small muted">Đi cùng kết nối Facebook</span>' : '<span class="small muted">Kết nối Facebook trước</span>')}
       ${card("tiktok", "TikTok", tt.connected ? "Đã kết nối · 1 kênh" : "Chưa kết nối", tt.connected, tt.connected ? `${esc(tt.name)} · gửi video vào hộp thư, bấm đăng trong app` : "Đăng vào hộp thư TikTok và kéo số liệu",
         "", d.apps.tiktok ? link("/api/social/tiktok/connect", tt.connected ? "Kết nối lại" : "Kết nối", !tt.connected) : '<span class="chip warn">Thiếu khoá app TikTok · Cài đặt › Khoá kết nối</span>')}
-      ${card("youtube", "YouTube", "Sắp có", false, "Shorts · cần tạo app Google (YouTube Data API)", "", '<button class="btn" type="button" disabled>Sắp có</button>')}
-      ${card("threads", "Threads", "Sắp có", false, "Cần app Threads API của Meta", "", '<button class="btn" type="button" disabled>Sắp có</button>')}</section>
-    ${fb.connected ? `<details class="box pad"><summary><b>Thiếu page?</b> <span class="small muted">Facebook chỉ cho app thấy những page anh tích lúc đăng nhập</span></summary>
-      <ol class="small" style="line-height:1.7;margin:8px 0;padding-left:18px"><li>Bấm <b>Kết nối lại</b> ở thẻ Facebook, ở bước chọn trang bấm <b>"Chọn tất cả"</b> (hoặc "Tất cả trang hiện tại và trong tương lai"), cả với Instagram.</li>
-        <li>Nếu page nằm trong nhiều Business Manager: vào business.facebook.com › Cài đặt doanh nghiệp › Người dùng › <b>Người dùng hệ thống</b> › thêm tài sản (tất cả page) › <b>Tạo mã truy cập</b> cho app này với các quyền pages_show_list, pages_read_engagement, read_insights, pages_manage_posts, instagram_basic, instagram_manage_insights, instagram_content_publish, rồi dán mã vào đây:</li></ol>
-      <div style="display:flex;gap:8px"><input class="in mono" id="sys-tok" type="password" placeholder="Mã truy cập người dùng hệ thống" autocomplete="off"><button class="btn" type="button" data-systoken>Dùng mã này</button></div></details>` : ""}
+    </section>
+    <details class="box pad"><summary><b>Nâng cao</b> <span class="small muted">Mã người dùng hệ thống Business Manager — chỉ khi OAuth không thấy hết page</span></summary>
+      <div style="display:flex;gap:8px;margin-top:8px"><input class="in mono" id="sys-tok" type="password" placeholder="Mã truy cập người dùng hệ thống" autocomplete="off"><button class="btn" type="button" data-systoken>Dùng mã này</button></div></details>
     <section class="box pad rowbox" style="gap:8px"><b style="margin-right:6px">Team</b>
       ${lib.teams.map((t, i) => `<span class="tchip t${i % 5}">${esc(t)}<span class="mono">${lib.channels.filter((c) => c.team === t && c.platform !== "instagram").length}</span><button type="button" data-rmteam="${esc(t)}" aria-label="Xoá team ${esc(t)}">✕</button></span>`).join("")}
       <input class="in" id="t-new" placeholder="Tên team mới" style="width:170px;min-height:32px" aria-label="Tên team mới"><button class="btn sm gold" type="button" data-addteam>Thêm</button></section>
@@ -63,11 +66,11 @@ export function connectView(lib, d, msg) {
       <button class="btn pri" type="button" data-syncall ${s.running ? "disabled" : ""}>${s.running ? "Đang cào…" : "Cào tất cả page đã chọn"}</button></div>
       ${s.errors.length ? `<details style="padding:0 16px 10px"><summary class="small" style="color:var(--warn)">${s.errors.length} lỗi lần cào gần nhất</summary><div class="small mono muted">${s.errors.map(esc).join("<br>")}</div></details>` : ""}
       ${rows ? `<div class="tscroll"><table class="ctab"><thead><tr><th>Cào</th><th>Page / kênh</th><th>Thị trường</th><th>Team</th><th class="num">Video</th><th class="num">View 30 ngày</th><th>Cào lần cuối</th><th><span class="sr">Thao tác</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : '<div class="empty">Kết nối Facebook hoặc TikTok để hiện danh sách page.</div>'}</section>
+        : '<div class="empty">Kết nối Facebook ở trên để hiện toàn bộ Fanpage.</div>'}</section>
     <details class="box pad"><summary><b>Hướng dẫn tạo app</b></summary><ol class="small" style="line-height:1.7;margin:8px 0 0;padding-left:18px">
-      <li><b>Meta:</b> developers.facebook.com › app loại Business › thêm Facebook Login for Business. Use cases: thêm pages_show_list, pages_read_engagement, read_insights, pages_manage_posts, instagram_basic, instagram_manage_insights, instagram_content_publish. Redirect URI: <code class="mono">${esc(d.redirects.meta)}</code>. App ID / Secret vào Cài đặt › Khoá kết nối.</li>
+      <li><b>Meta:</b> developers.facebook.com › Facebook Login (không dùng Login for Business / Config ID). Quyền: pages_show_list, pages_read_engagement, read_insights, pages_manage_posts, business_management, instagram_basic, instagram_manage_insights, instagram_content_publish. Redirect URI: <code class="mono">${esc(d.redirects.meta)}</code>. App ID / Secret vào Cài đặt › Khoá kết nối.</li>
       <li><b>TikTok:</b> developers.tiktok.com › Login Kit + Content Posting API, scopes user.info.basic, video.upload, video.publish, video.list. Redirect URI: <code class="mono">${esc(d.redirects.tiktok)}</code>.</li></ol>
-      ${fb.connected || tt.connected ? `<div style="display:flex;gap:8px;margin-top:10px">${fb.connected ? '<button class="btn sm danger" type="button" data-disc="meta">Ngắt Facebook / Instagram</button>' : ""}${tt.connected ? '<button class="btn sm danger" type="button" data-disc="tiktok">Ngắt TikTok</button>' : ""}</div>` : ""}</details>`;
+      ${tt.connected ? '<div style="margin-top:10px"><button class="btn sm danger" type="button" data-disc="tiktok">Ngắt TikTok</button></div>' : ""}</details>`;
 }
 
 const val = (el, sel) => el.querySelector(sel)?.value;

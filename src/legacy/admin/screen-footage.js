@@ -2,7 +2,8 @@
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
-  board: "index", shoot: "", hideStill: false, composer: null, boardErr: "" };
+  board: "index", shoot: "", hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
+const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
 const LIBS = { product: "Sản phẩm", huyk: "HuyK", illus: "Minh hoạ AI", outro: "Outro" };
 const KINDS = [{ key: "nhan", label: "Nhẫn" }, { key: "lac_tay", label: "Lắc tay" },
   { key: "bong_tai", label: "Bông tai" }, { key: "day_chuyen", label: "Dây chuyền" }];
@@ -323,8 +324,10 @@ let usage = {};
 const PAGE = 60;
 function card(c, lb) {
   const [n, done] = usage[c.id] || [0, 0];
-  return `<button type="button" class="cclip${st.picked === c.id ? " sel" : ""}" data-clip="${esc(c.id)}" ${canSort() ? "draggable=\"true\"" : ""}>
+  const tick = canSort() && st.checked.has(c.id);
+  return `<button type="button" class="cclip${st.picked === c.id ? " sel" : ""}${tick ? " tick" : ""}" data-clip="${esc(c.id)}" ${canSort() ? "draggable=\"true\"" : ""}>
       <span class="tmb">${thumbImg(c.thumb, c.name)}<span class="lb ${isCraft(c) ? "craft" : st.lib}">${lb}${c.market && MK[c.market] ? " · " + MK[c.market] : ""}</span><span class="tc">${dur(c)}</span>
+        ${canSort() ? `<span class="cchk" data-check="${esc(c.id)}" role="checkbox" aria-checked="${tick ? "true" : "false"}" aria-label="Chọn clip"></span>` : ""}
         <span class="uc${n ? "" : " zero"}" title="${n ? `Đã dùng trong ${n} video · ${done} đã xuất` : "Chưa dùng trong video nào"}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>${n} lần</span></span>
       <span class="meta"><span>${esc(clipTitle(c))}</span><span class="dot ${c.tags?.aesthetic >= 3 ? "ok" : "warn"}"></span></span></button>`;
 }
@@ -421,7 +424,9 @@ function craftBoard(lib) {
       ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
       <span class="muted small">Mỗi video chỉ lấy source của một lần quay, không trộn.</span>
     </div>
-    <p class="muted small" style="margin:0">Kéo một clip thả vào công đoạn khác để chuyển tag. Kéo ra <b>Chưa xếp</b> nếu xếp nhầm.</p>`;
+    <p class="muted small" style="margin:0">Tick nhiều clip rồi kéo một clip trong cụm sang công đoạn khác. Chưa tick thì kéo từng clip. Cmd/Ctrl click để chọn thêm, Shift click chọn dải.</p>
+    ${st.checked.size ? `<div class="fpick" id="f-picked">Đã chọn <b>${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
+      <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>` : ""}`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
   const body = rows.map((row) => {
     const editing = cm.kind === "edit" && Number(cm.idx) === Number(row.idx) && cm.label === row.label;
@@ -443,7 +448,8 @@ function craftBoard(lib) {
       : editing
         ? `<button type="submit" form="f-step-form" class="btn sm pri">Lưu</button>
            <button type="button" class="btn sm" data-step-cancel="1">Hủy</button>`
-        : `<button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.idx}">Sửa</button>
+        : `<button type="button" class="btn sm" data-check-row="${esc(row.label)}" data-step-idx="${row.idx}">${row.clips.length && row.clips.every((c) => st.checked.has(c.id)) ? "Bỏ chọn" : "Chọn hết"}</button>
+           <button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.idx}">Sửa</button>
            ${locked ? "" : `<button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.idx}">Xóa</button>`}`;
     return `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.idx}" data-drop-label="${esc(row.label)}">
       <div class="fstep-h">
@@ -565,6 +571,55 @@ export async function render(view, ctx) {
   };
   const folderClips = (idx, label) => boardClips(lib).filter((c) => Number(c.step_index || 999) === Number(idx)
     && String(c.step_label || STEP_VI[c.craft_step] || "Chưa xếp") === String(label));
+  const boardIds = () => stepBoards(boardClips(lib)).flatMap((r) => r.clips.map((c) => c.id));
+  const toggleTick = (id, ev) => {
+    if (ev?.shiftKey && st.lastTick) {
+      const ids = boardIds();
+      const a = ids.indexOf(st.lastTick);
+      const b = ids.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        ids.slice(lo, hi + 1).forEach((x) => st.checked.add(x));
+        st.lastTick = id;
+        return;
+      }
+    }
+    if (st.checked.has(id)) st.checked.delete(id);
+    else st.checked.add(id);
+    st.lastTick = id;
+  };
+  const moveClips = async (ids, step, idx, label) => {
+    const craft = NEW_SET.has(step) || step === "__unsorted" ? step : undefined;
+    const clips = [];
+    for (const id of ids) {
+      const clip = lib.find((c) => c.id === id);
+      if (!clip || clip.product_set !== st.sku || originOf(clip) !== st.origin) continue;
+      if (Number(clip.step_index || 999) === idx && String(clip.step_label || "") === String(label)) continue;
+      clips.push(clip);
+    }
+    if (!clips.length) return 0;
+    const prev = clips.map((c) => ({ c, craft_step: c.craft_step, step_label: c.step_label, step_index: c.step_index }));
+    for (const c of clips) {
+      if (craft) c.craft_step = craft;
+      c.step_label = label;
+      c.step_index = idx;
+    }
+    st.boardErr = "";
+    paint();
+    try {
+      for (const c of clips) await api.setClipFolder(c.id, { step_index: idx, step_label: label, craft_step: craft });
+      await persistFolders();
+      return clips.length;
+    } catch (err) {
+      for (const p of prev) {
+        p.c.craft_step = p.craft_step;
+        p.c.step_label = p.step_label;
+        p.c.step_index = p.step_index;
+      }
+      st.boardErr = err.message;
+      throw err;
+    }
+  };
   const nameTaken = (name, skipIdx, skipLabel) => stepBoards(boardClips(lib)).some((r) =>
     r.label.trim().toLowerCase() === name.toLowerCase()
     && !(Number(r.idx) === Number(skipIdx) && r.label === skipLabel));
@@ -637,10 +692,22 @@ export async function render(view, ctx) {
   el.addEventListener("dragstart", (e) => {
     const card = e.target.closest?.("[data-clip]");
     if (!card || !canSort()) return;
+    if (e.target.closest?.("[data-check]")) { e.preventDefault(); return; }
+    const id = card.dataset.clip;
+    const ids = st.checked.has(id) && st.checked.size > 1 ? [...st.checked] : [id];
     dragging = true;
-    e.dataTransfer.setData("text/plain", card.dataset.clip);
+    e.dataTransfer.setData("text/plain", ids.join("\n"));
     e.dataTransfer.effectAllowed = "move";
-    card.classList.add("dragging");
+    const mark = new Set(ids);
+    el.querySelectorAll("[data-clip]").forEach((n) => { if (mark.has(n.dataset.clip)) n.classList.add("dragging"); });
+    if (ids.length > 1) {
+      const ghost = document.createElement("div");
+      ghost.className = "cdrag-ghost";
+      ghost.textContent = `${ids.length} clip`;
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 28, 16);
+      requestAnimationFrame(() => ghost.remove());
+    }
   });
   el.addEventListener("dragover", (e) => {
     const row = e.target.closest?.("[data-drop-step]");
@@ -656,37 +723,28 @@ export async function render(view, ctx) {
   });
   el.addEventListener("drop", async (e) => {
     const row = e.target.closest?.("[data-drop-step]");
-    const id = e.dataTransfer.getData("text/plain");
+    const ids = (e.dataTransfer.getData("text/plain") || "").split("\n").map((x) => x.trim()).filter(Boolean);
     el.querySelectorAll(".drop-on,.cclip.dragging").forEach((x) => x.classList.remove("drop-on", "dragging"));
-    if (!row || !id || !canSort()) return;
+    if (!row || !ids.length || !canSort()) return;
     e.preventDefault();
     const step = row.dataset.dropStep;
     const idx = Number(row.dataset.dropIdx || 0);
     const label = row.dataset.dropLabel || (step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step));
-    const clip = lib.find((c) => c.id === id);
-    if (!clip || clip.product_set !== st.sku || originOf(clip) !== st.origin) {
+    const bad = ids.some((id) => {
+      const clip = lib.find((c) => c.id === id);
+      return !clip || clip.product_set !== st.sku || originOf(clip) !== st.origin;
+    });
+    if (bad) {
       st.boardErr = "Chỉ kéo clip của đúng mã và nguồn đang mở";
       paint();
       return;
     }
-    if (Number(clip.step_index || 999) === idx && String(clip.step_label || "") === String(label)) return;
-    const prev = { craft_step: clip.craft_step, step_label: clip.step_label, step_index: clip.step_index };
-    const craft = NEW_SET.has(step) || step === "__unsorted" ? step : undefined;
-    if (craft) clip.craft_step = craft;
-    clip.step_label = label;
-    clip.step_index = idx;
-    st.boardErr = "";
-    paint();
     try {
-      await api.setClipFolder(id, { step_index: idx, step_label: label, craft_step: craft });
-      await persistFolders();
-    } catch (err) {
-      clip.craft_step = prev.craft_step;
-      clip.step_label = prev.step_label;
-      clip.step_index = prev.step_index;
-      st.boardErr = err.message;
-      paint();
-    }
+      ids.forEach((id) => st.checked.delete(id));
+      const n = await moveClips(ids, step, idx, label);
+      if (n) toast(n > 1 ? `Đã chuyển ${n} clip → ${label}` : `Đã chuyển sang ${label}`);
+    } catch { /* boardErr set */ }
+    paint();
   });
   el.addEventListener("dragend", () => {
     dragging = false;
@@ -713,18 +771,36 @@ export async function render(view, ctx) {
     }
   });
   el.addEventListener("click", async (e) => {
+    const box = e.target.closest("[data-check]");
+    if (box) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTick(box.dataset.check, e);
+      paint();
+      return;
+    }
     const t = e.target.closest("button, [data-close]");
     if (!t) return;
+    if (t.hasAttribute("data-uncheck")) { clearTicks(); paint(); return; }
+    if (t.dataset.checkRow !== undefined) {
+      const row = t.closest("[data-drop-step]");
+      const ids = [...(row?.querySelectorAll("[data-clip]") || [])].map((n) => n.dataset.clip);
+      const allOn = ids.length && ids.every((id) => st.checked.has(id));
+      ids.forEach((id) => (allOn ? st.checked.delete(id) : st.checked.add(id)));
+      if (ids.length) st.lastTick = ids[ids.length - 1];
+      paint();
+      return;
+    }
     if (t.dataset.lib) {
       st.lib = t.dataset.lib; st.sku = ""; st.origin = ""; st.group = st.lib === "outro" ? "huyk" : "";
-      st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return;
+      st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return;
     }
     if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
     if (t.hasAttribute("data-back-origin")) {
       st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; st.composer = null; st.boardErr = "";
-      await fillView(); paint(); return;
+      clearTicks(); await fillView(); paint(); return;
     }
-    if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
     if (t.dataset.board) { st.board = t.dataset.board; paint(); return; }
     if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
@@ -772,11 +848,17 @@ export async function render(view, ctx) {
       paint();
       return;
     }
-    if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; await fillView(); paint(); return; }
-    if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
+    if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
     if (t.dataset.step !== undefined) { st.step = st.step === t.dataset.step ? "" : t.dataset.step; st.shown = 60; paint(); return; }
     if (t.dataset.group !== undefined) { st.group = t.dataset.group; st.shown = 60; paint(); return; }
-    if (t.dataset.clip) { if (dragging) return; st.picked = t.dataset.clip; el.querySelector("#fprev").innerHTML = preview(lib); return; }
+    if (t.dataset.clip) {
+      if (dragging) return;
+      if (canSort() && (e.metaKey || e.ctrlKey || e.shiftKey)) { toggleTick(t.dataset.clip, e); paint(); return; }
+      st.picked = t.dataset.clip;
+      el.querySelector("#fprev").innerHTML = preview(lib);
+      return;
+    }
     if (t.hasAttribute("data-close")) { st.picked = null; el.querySelector("#fprev").innerHTML = ""; return; }
     if (t.id === "src-scan") {
       const tg = scanTarget(lib, src);
