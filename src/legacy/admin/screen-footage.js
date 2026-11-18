@@ -469,20 +469,24 @@ function craftBoard(lib) {
   return `<div class="fboard">${tools}${body}</div>`;
 }
 function grid(lib) {
-  if (st.lib === "product" && st.sku && isCraftOrigin()) return craftBoard(lib);
+  if (st.lib === "product" && st.sku && isCraftOrigin()) {
+    if (st._loading && !skuClips(lib).length) return `<div class="empty is-busy">Đang tải clip…</div>`;
+    return craftBoard(lib);
+  }
   if (st.lib === "product" && !st.sku) {
     const rows = skuRows(lib, covRef);
-    if (!rows.length) return `<div class="empty">Không có mã khớp. Đổi loại hoặc ô tìm.</div>`;
+    if (!rows.length) return `<div class="empty${st._loading ? " is-busy" : ""}">${st._loading ? "Đang tải kho footage…" : "Không có mã khớp. Đổi loại hoặc ô tìm."}</div>`;
     return `<div class="sku-grid">${rows.map(skuCard).join("")}</div>`;
   }
   if (st.lib === "product" && st.sku && !st.origin) {
     const rows = originRows(lib);
-    if (!rows.length) return `<div class="empty">Mã này chưa có clip chế tác.</div>`;
+    if (!rows.length) return `<div class="empty${st._loading ? " is-busy" : ""}">${st._loading ? "Đang tải nguồn của mã…" : "Mã này chưa có clip chế tác."}</div>`;
     return `<div class="sku-grid">${rows.map(originCard).join("")}</div>`;
   }
   const list = clipsOf(lib);
   if (!list.length) {
-    return `<div class="empty">${st.lib === "outro" ? "Chưa có clip outro. Bỏ video vào SOURCE\\Outro rồi bấm Quét lại."
+    return `<div class="empty${st._loading ? " is-busy" : ""}">${st._loading ? "Đang tải clip…"
+      : st.lib === "outro" ? "Chưa có clip outro. Bỏ video vào SOURCE\\Outro rồi bấm Quét lại."
       : st.step && st.step !== "__unsorted" ? "Chưa có clip ở công đoạn này. Kéo từ Tất cả clip mã này / Chưa xếp."
       : "Không có clip khớp."}</div>`;
   }
@@ -539,21 +543,22 @@ export async function render(view, ctx) {
   };
   el.innerHTML = '<div class="empty is-busy">Đang tải kho footage…</div>';
   let lib = mergeLib();
-  let src, cov;
-  const timed = (p, ms, fallback) => Promise.race([p, new Promise((res) => setTimeout(() => res(fallback), ms))]);
+  let src = { configured: false };
+  let cov = { rows: [], columns: [] };
   let summary = { huyk: 0, outro: 0, illus: 0, skus: {} };
-  [src, cov, usage, summary] = await Promise.all([
-    timed(api.sourceStatus().catch(() => ({ configured: false })), 8000, { configured: false }),
-    timed(api.coverage().catch(() => ({ rows: [], columns: [] })), 15000, { rows: [], columns: [] }),
-    timed(api.footageUsage().catch(() => ({})), 8000, {}),
-    timed(api.librarySummary().catch(() => ({ huyk: 0, outro: 0 })), 8000, { huyk: 0, outro: 0 }),
-  ]);
-  summaryRef = summary || summaryRef;
+  const timed = (p, ms, fallback) => Promise.race([p, new Promise((res) => setTimeout(() => res(fallback), ms))]);
+  let navGen = 0;
+  const viewKey = () => {
+    if (st.lib === "huyk" || st.origin === "huyk") return "huyk";
+    if (st.lib === "outro" || st.origin === "outro") return "outro";
+    if (st.lib === "illus") return "illus";
+    if (st.sku) return `sku:${st.sku}`;
+    return "";
+  };
   const fillView = async () => {
     try {
-      if (st.lib === "huyk" || st.origin === "huyk") await pull("huyk", { library: "huyk" });
-      else if (st.lib === "outro" || st.origin === "outro") await pull("outro", { library: "outro" });
-      else if (st.lib === "illus") await pull("illus", { library: "illus" });
+      const key = viewKey();
+      if (key === "huyk" || key === "outro" || key === "illus") await pull(key, { library: key });
       else if (st.sku) await pull(`sku:${st.sku}`, { sku: st.sku });
     } catch { /* lưới vẫn vẽ từ coverage */ }
     lib = mergeLib();
@@ -569,6 +574,17 @@ export async function render(view, ctx) {
         await api.saveEmptyFolders(st.sku, st.origin, extraFolders).catch(() => {});
       }
     } else extraFolders = [];
+    st._loading = false;
+  };
+  const go = (fn) => {
+    const prev = `${st.lib}|${st.sku}|${st.origin}`;
+    fn?.();
+    if (`${st.lib}|${st.sku}|${st.origin}` !== prev) extraFolders = [];
+    const key = viewKey();
+    st._loading = !!(key && !pools.has(key));
+    const gen = ++navGen;
+    paint();
+    fillView().then(() => { if (gen === navGen) paint(); });
   };
   const persistFolders = async () => {
     extraFolders = stepBoards(boardClips(lib))
@@ -673,14 +689,13 @@ export async function render(view, ctx) {
     } catch (err) { st.composer = { ...cm, name, err: err.message }; }
     paint();
   };
-  await fillView();
   const paint = () => {
     covRef = cov || { rows: [], columns: [] };
     if (st.lib === "huyk_sp" || st.lib === "tho" || st.lib === "craft") {
       st.origin = st.lib === "huyk_sp" ? "huyk_sp" : st.lib === "tho" ? "tho" : st.origin;
       st.lib = "product";
     }
-    if (st.lib === "product" && st.sku && !readySkus().has(st.sku)) { st.sku = ""; st.origin = ""; st.step = ""; }
+    if (st.lib === "product" && st.sku && readyRows().length && !readySkus().has(st.sku)) { st.sku = ""; st.origin = ""; st.step = ""; }
     const gs = groups(lib, cov);
     const board = st.lib === "product" && st.sku && isCraftOrigin();
     const sideTop = el.querySelector(".side-l")?.scrollTop || 0;
@@ -719,6 +734,21 @@ export async function render(view, ctx) {
     io.observe(pg);
   };
   paint();
+  (async () => {
+    const gen = ++navGen;
+    st._loading = true;
+    paint();
+    [src, cov, usage, summary] = await Promise.all([
+      timed(api.sourceStatus().catch(() => ({ configured: false })), 8000, { configured: false }),
+      timed(api.coverage().catch(() => ({ rows: [], columns: [] })), 15000, { rows: [], columns: [] }),
+      timed(api.footageUsage().catch(() => ({})), 8000, {}),
+      timed(api.librarySummary().catch(() => ({ huyk: 0, outro: 0 })), 8000, { huyk: 0, outro: 0 }),
+    ]);
+    summaryRef = summary || summaryRef;
+    if (gen !== navGen) return;
+    await fillView();
+    if (gen === navGen) paint();
+  })();
   let dragging = false;
   const drag = { ready: null, on: false, ids: [], ghost: null, row: null };
   const clearDrag = () => {
@@ -863,6 +893,12 @@ export async function render(view, ctx) {
       watchMore();
     }
   });
+  el.addEventListener("pointerover", (e) => {
+    const sku = e.target.closest("[data-sku]")?.dataset.sku;
+    if (sku) pull(`sku:${sku}`, { sku }).catch(() => {});
+    const libk = e.target.closest("[data-lib]")?.dataset.lib;
+    if (libk === "huyk" || libk === "outro" || libk === "illus") pull(libk, { library: libk }).catch(() => {});
+  });
   el.addEventListener("click", async (e) => {
     const box = e.target.closest("[data-check]");
     if (box) {
@@ -885,15 +921,24 @@ export async function render(view, ctx) {
       return;
     }
     if (t.dataset.lib) {
-      st.lib = t.dataset.lib; st.sku = ""; st.origin = ""; st.group = st.lib === "outro" ? "huyk" : "";
-      st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return;
+      go(() => {
+        st.lib = t.dataset.lib; st.sku = ""; st.origin = ""; st.group = st.lib === "outro" ? "huyk" : "";
+        st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks();
+      });
+      return;
     }
-    if (t.dataset.cat !== undefined) { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; await fillView(); paint(); return; }
+    if (t.dataset.cat !== undefined) { go(() => { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; }); return; }
     if (t.hasAttribute("data-back-origin")) {
-      st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; st.composer = null; st.boardErr = "";
-      clearTicks(); await fillView(); paint(); return;
+      go(() => {
+        st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; st.composer = null; st.boardErr = "";
+        clearTicks();
+      });
+      return;
     }
-    if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
+    if (t.dataset.origin !== undefined) {
+      go(() => { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; clearTicks(); });
+      return;
+    }
     if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
     if (t.hasAttribute("data-step-add")) {
@@ -940,8 +985,8 @@ export async function render(view, ctx) {
       paint();
       return;
     }
-    if (t.dataset.backSkus) { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
-    if (t.dataset.sku !== undefined) { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
+    if (t.dataset.backSkus) { go(() => { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; clearTicks(); }); return; }
+    if (t.dataset.sku !== undefined) { go(() => { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks(); }); return; }
     if (t.dataset.step !== undefined) { st.step = st.step === t.dataset.step ? "" : t.dataset.step; st.shown = 60; paint(); return; }
     if (t.dataset.group !== undefined) { st.group = t.dataset.group; st.shown = 60; paint(); return; }
     if (t.dataset.clip) {
