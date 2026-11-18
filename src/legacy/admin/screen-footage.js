@@ -325,7 +325,7 @@ const PAGE = 60;
 function card(c, lb) {
   const [n, done] = usage[c.id] || [0, 0];
   const tick = canSort() && st.checked.has(c.id);
-  return `<button type="button" class="cclip${st.picked === c.id ? " sel" : ""}${tick ? " tick" : ""}" data-clip="${esc(c.id)}" ${canSort() ? "draggable=\"true\"" : ""}>
+  return `<button type="button" class="cclip${st.picked === c.id ? " sel" : ""}${tick ? " tick" : ""}" data-clip="${esc(c.id)}">
       <span class="tmb">${thumbImg(c.thumb, c.name)}<span class="lb ${isCraft(c) ? "craft" : st.lib}">${lb}${c.market && MK[c.market] ? " · " + MK[c.market] : ""}</span><span class="tc">${dur(c)}</span>
         ${canSort() ? `<span class="cchk" data-check="${esc(c.id)}" role="checkbox" aria-checked="${tick ? "true" : "false"}" aria-label="Chọn clip"></span>` : ""}
         <span class="uc${n ? "" : " zero"}" title="${n ? `Đã dùng trong ${n} video · ${done} đã xuất` : "Chưa dùng trong video nào"}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>${n} lần</span></span>
@@ -424,9 +424,9 @@ function craftBoard(lib) {
       ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
       <span class="muted small">Mỗi video chỉ lấy source của một lần quay, không trộn.</span>
     </div>
-    <p class="muted small" style="margin:0">Tick nhiều clip rồi kéo một clip trong cụm sang công đoạn khác. Chưa tick thì kéo từng clip. Cmd/Ctrl click để chọn thêm, Shift click chọn dải.</p>
-    ${st.checked.size ? `<div class="fpick" id="f-picked">Đã chọn <b>${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
-      <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>` : ""}`;
+    <p class="muted small" style="margin:0">Tick ô vuông, rồi kéo <b>một clip đã tick</b> sang hàng công đoạn khác — cả cụm đi theo. Chưa tick thì kéo từng clip.</p>
+    <div class="fpick" id="f-picked" ${st.checked.size ? "" : "hidden"}>Đã chọn <b id="f-picked-n">${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
+      <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
   const body = rows.map((row) => {
     const editing = cm.kind === "edit" && Number(cm.idx) === Number(row.idx) && cm.label === row.label;
@@ -509,6 +509,7 @@ export async function render(view, ctx) {
   const el = document.createElement("div");
   el.className = "fscreen";
   view.replaceChildren(el);
+  ctx.boot = ctx.boot || { library: [] };
   ctx.boot.library = ctx.boot.library || [];
   const pools = new Map();
   const mergeLib = () => {
@@ -607,7 +608,7 @@ export async function render(view, ctx) {
     st.boardErr = "";
     paint();
     try {
-      for (const c of clips) await api.setClipFolder(c.id, { step_index: idx, step_label: label, craft_step: craft });
+      await api.setClipsFolder(clips.map((c) => c.id), { step_index: idx, step_label: label, craft_step: craft });
       await persistFolders();
       return clips.length;
     } catch (err) {
@@ -678,6 +679,18 @@ export async function render(view, ctx) {
       try { inp.setSelectionRange(pos, pos); } catch { /* ignore */ }
     }
   };
+  const syncTicks = () => {
+    el.querySelectorAll("[data-clip]").forEach((n) => {
+      const on = st.checked.has(n.dataset.clip);
+      n.classList.toggle("tick", on);
+      const box = n.querySelector("[data-check]");
+      if (box) box.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const bar = el.querySelector("#f-picked");
+    const num = el.querySelector("#f-picked-n");
+    if (bar) bar.hidden = !st.checked.size;
+    if (num) num.textContent = String(st.checked.size);
+  };
   let io = null;
   const watchMore = () => {
     io?.disconnect();
@@ -689,44 +702,20 @@ export async function render(view, ctx) {
   };
   paint();
   let dragging = false;
-  el.addEventListener("dragstart", (e) => {
-    const card = e.target.closest?.("[data-clip]");
-    if (!card || !canSort()) return;
-    if (e.target.closest?.("[data-check]")) { e.preventDefault(); return; }
-    const id = card.dataset.clip;
-    const ids = st.checked.has(id) && st.checked.size > 1 ? [...st.checked] : [id];
-    dragging = true;
-    e.dataTransfer.setData("text/plain", ids.join("\n"));
-    e.dataTransfer.effectAllowed = "move";
-    const mark = new Set(ids);
-    el.querySelectorAll("[data-clip]").forEach((n) => { if (mark.has(n.dataset.clip)) n.classList.add("dragging"); });
-    if (ids.length > 1) {
-      const ghost = document.createElement("div");
-      ghost.className = "cdrag-ghost";
-      ghost.textContent = `${ids.length} clip`;
-      document.body.appendChild(ghost);
-      e.dataTransfer.setDragImage(ghost, 28, 16);
-      requestAnimationFrame(() => ghost.remove());
-    }
-  });
-  el.addEventListener("dragover", (e) => {
-    const row = e.target.closest?.("[data-drop-step]");
-    if (!row || !canSort()) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    el.querySelectorAll(".drop-on").forEach((x) => x.classList.remove("drop-on"));
-    row.classList.add("drop-on");
-  });
-  el.addEventListener("dragleave", (e) => {
-    const row = e.target.closest?.("[data-drop-step]");
-    if (row && !row.contains(e.relatedTarget)) row.classList.remove("drop-on");
-  });
-  el.addEventListener("drop", async (e) => {
-    const row = e.target.closest?.("[data-drop-step]");
-    const ids = (e.dataTransfer.getData("text/plain") || "").split("\n").map((x) => x.trim()).filter(Boolean);
+  const drag = { ready: null, on: false, ids: [], ghost: null, row: null };
+  const clearDrag = () => {
+    drag.ready = null;
+    drag.on = false;
+    drag.ids = [];
+    drag.row = null;
+    drag.ghost?.remove();
+    drag.ghost = null;
+    document.body.classList.remove("clip-dragging");
     el.querySelectorAll(".drop-on,.cclip.dragging").forEach((x) => x.classList.remove("drop-on", "dragging"));
+    setTimeout(() => { dragging = false; }, 0);
+  };
+  const dropOn = async (row, ids) => {
     if (!row || !ids.length || !canSort()) return;
-    e.preventDefault();
     const step = row.dataset.dropStep;
     const idx = Number(row.dataset.dropIdx || 0);
     const label = row.dataset.dropLabel || (step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step));
@@ -745,11 +734,53 @@ export async function render(view, ctx) {
       if (n) toast(n > 1 ? `Đã chuyển ${n} clip → ${label}` : `Đã chuyển sang ${label}`);
     } catch { /* boardErr set */ }
     paint();
+  };
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button) return;
+    if (e.target.closest("[data-check], .fstep-act, input, select, textarea, form, [data-uncheck]")) return;
+    const card = e.target.closest("[data-clip]");
+    if (!card || !canSort()) return;
+    const id = card.dataset.clip;
+    const ids = st.checked.has(id) && st.checked.size ? [...st.checked] : [id];
+    drag.ready = { ids, x: e.clientX, y: e.clientY, pointerId: e.pointerId };
   });
-  el.addEventListener("dragend", () => {
-    dragging = false;
-    el.querySelectorAll(".drop-on,.cclip.dragging").forEach((x) => x.classList.remove("drop-on", "dragging"));
+  el.addEventListener("pointermove", (e) => {
+    if (!drag.ready && !drag.on) return;
+    if (drag.ready && !drag.on) {
+      const dx = e.clientX - drag.ready.x;
+      const dy = e.clientY - drag.ready.y;
+      if (dx * dx + dy * dy < 64) return;
+      drag.on = true;
+      dragging = true;
+      drag.ids = drag.ready.ids;
+      try { el.setPointerCapture(drag.ready.pointerId); } catch { /* ignore */ }
+      const mark = new Set(drag.ids);
+      el.querySelectorAll("[data-clip]").forEach((n) => { if (mark.has(n.dataset.clip)) n.classList.add("dragging"); });
+      drag.ghost = document.createElement("div");
+      drag.ghost.className = "cdrag-ghost";
+      drag.ghost.textContent = drag.ids.length > 1 ? `${drag.ids.length} clip` : "1 clip";
+      document.body.appendChild(drag.ghost);
+      document.body.classList.add("clip-dragging");
+      drag.ready = null;
+    }
+    if (!drag.on || !drag.ghost) return;
+    e.preventDefault();
+    drag.ghost.style.left = `${e.clientX + 14}px`;
+    drag.ghost.style.top = `${e.clientY + 14}px`;
+    el.querySelectorAll(".drop-on").forEach((x) => x.classList.remove("drop-on"));
+    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-step]");
+    if (hit) hit.classList.add("drop-on");
+    drag.row = hit || null;
   });
+  const endDrag = (e) => {
+    const row = drag.row;
+    const ids = drag.ids;
+    const was = drag.on;
+    clearDrag();
+    if (was) dropOn(row, ids);
+  };
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", () => clearDrag());
   el.addEventListener("submit", (e) => {
     if (e.target.id !== "f-step-form") return;
     e.preventDefault();
@@ -776,7 +807,7 @@ export async function render(view, ctx) {
       e.preventDefault();
       e.stopPropagation();
       toggleTick(box.dataset.check, e);
-      paint();
+      syncTicks();
       return;
     }
     const t = e.target.closest("button, [data-close]");
@@ -854,7 +885,7 @@ export async function render(view, ctx) {
     if (t.dataset.group !== undefined) { st.group = t.dataset.group; st.shown = 60; paint(); return; }
     if (t.dataset.clip) {
       if (dragging) return;
-      if (canSort() && (e.metaKey || e.ctrlKey || e.shiftKey)) { toggleTick(t.dataset.clip, e); paint(); return; }
+      if (canSort() && (e.metaKey || e.ctrlKey || e.shiftKey)) { toggleTick(t.dataset.clip, e); syncTicks(); return; }
       st.picked = t.dataset.clip;
       el.querySelector("#fprev").innerHTML = preview(lib);
       return;
@@ -900,5 +931,5 @@ export async function render(view, ctx) {
     if (st.picked) { st.picked = null; el.querySelector("#fprev").innerHTML = ""; }
   };
   document.addEventListener("keydown", onKey);
-  ctx.setCleanup(() => { io?.disconnect(); clearInterval(timer); document.removeEventListener("keydown", onKey); });
+  ctx.setCleanup(() => { io?.disconnect(); clearInterval(timer); document.removeEventListener("keydown", onKey); clearDrag(); });
 }

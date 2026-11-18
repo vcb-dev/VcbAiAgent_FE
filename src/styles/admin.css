@@ -109,8 +109,10 @@ table.t tr:hover td { background: var(--pane-2); }
 .lrow:hover { background: var(--pane-2); } .lrow.on { background: var(--active-bg); }
 .lrow.empty { opacity: .72; }
 .lrow.drop-on, .stepchip.drop-on { outline: 2px solid var(--accent); background: var(--active-bg); }
-.cclip[draggable="true"] { cursor: grab; }
-.cclip.dragging { opacity: .45; }
+.fboard .cclip { cursor: grab; touch-action: none; }
+.cclip.dragging { opacity: .4; }
+body.clip-dragging { cursor: grabbing; user-select: none; }
+body.clip-dragging .cclip { cursor: grabbing; }
 .cclip .cchk { position: absolute; top: 6px; right: 6px; z-index: 2; width: 22px; height: 22px; border-radius: 6px;
   border: 1.5px solid rgba(255,255,255,.9); background: rgba(0,0,0,.35); box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 .cclip .cchk:hover { background: rgba(0,0,0,.55); }
@@ -120,8 +122,8 @@ table.t tr:hover td { background: var(--pane-2); }
 .cclip.tick { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .fpick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; padding: 8px 12px; border-radius: 10px;
   background: var(--active-bg, rgba(184,137,44,.12)); border: 1px solid var(--accent); font-size: 13px; }
-.cdrag-ghost { position: absolute; left: -9999px; top: 0; padding: 6px 12px; border-radius: 8px; background: var(--accent, #b8892c);
-  color: #fff; font: 700 13px var(--sans); pointer-events: none; }
+.cdrag-ghost { position: fixed; z-index: 80; left: 0; top: 0; padding: 8px 12px; border-radius: 8px; background: var(--accent, #b8892c);
+  color: #fff; font: 700 13px var(--sans); pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
 .lrow .ic { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 8px; background: var(--thumb); display: grid; place-items: center; color: var(--accent); overflow: hidden; }
 .lrow .ic img { width: 100%; height: 100%; object-fit: cover; }
 .lrow .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }

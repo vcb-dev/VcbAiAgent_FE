@@ -21,7 +21,30 @@ const SCREENS = {
 const ALIAS = { g2: "review" };
 const same = (a, b) => a.length === b.length && a.every((item, index) => item === b[index]);
 
-const boot = { current: null };
+const boot = { current: null, inflight: null };
+const EMPTY_BOOT = { library: [], products: [], templates: [], samples: [], clip_count: 0, music: [], emotions: {}, settings_defaults: {} };
+
+async function ensureBoot() {
+  if (boot.current) return boot.current;
+  if (!boot.inflight) {
+    boot.inflight = (async () => {
+      let last = null;
+      for (let i = 0; i < 3; i++) {
+        try {
+          boot.current = await api.bootstrap(true);
+          return boot.current;
+        } catch (err) {
+          last = err;
+          await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+        }
+      }
+      boot.current = { ...EMPTY_BOOT };
+      toast(last?.message || "AI chậm — mở màn hình trước, dữ liệu sẽ nạp sau.", true);
+      return boot.current;
+    })().finally(() => { boot.inflight = null; });
+  }
+  return boot.inflight;
+}
 
 async function openScreen(view, bar, state, pathname) {
   const parts = pathname.split("/").filter(Boolean);
@@ -33,7 +56,7 @@ async function openScreen(view, bar, state, pathname) {
   const name = ALIAS[parts[0]] || parts[0] || "content";
   const key = SCREENS[name] ? name : "content";
   const params = parts.slice(1).map(decodeURIComponent);
-  if (key === "footage" || key === "fx" || key === "jobs" || key === "workflow") {
+  if (key === "fx" || key === "jobs" || key === "workflow") {
     const stale = state.alive.get(key);
     if (stale) { stale.cleanup?.(); stale.stage.remove(); state.alive.delete(key); }
   }
@@ -72,12 +95,7 @@ async function openScreen(view, bar, state, pathname) {
   stage.innerHTML = `<div class="page"><p class="muted pad">Đang tải…</p></div>`;
   const late = setTimeout(swap, 400);
   try {
-    if (!boot.current) {
-      boot.current = await Promise.race([
-        api.bootstrap(true),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("AI không phản hồi. Chạy lại BE/AI rồi tải lại trang.")), 12000)),
-      ]).catch((err) => { boot.current = null; throw err; });
-    }
+    if (!boot.current) await ensureBoot();
     const mod = await SCREENS[key]();
     await mod.render(stage, {
       boot: boot.current,

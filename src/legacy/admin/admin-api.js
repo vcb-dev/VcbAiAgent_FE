@@ -148,6 +148,7 @@ export const api = {
   tagDecision: (clipId, body) => call(`/api/review/tags/${encodeURIComponent(clipId)}`, { method: "POST", body: JSON.stringify(body) }),
   setClipStep: (clipId, craft_step) => call(`/api/clips/${encodeURIComponent(clipId)}/craft-step`, { method: "POST", body: JSON.stringify({ craft_step }) }),
   setClipFolder: (clipId, body) => call(`/api/clips/${encodeURIComponent(clipId)}/folder`, { method: "POST", body: JSON.stringify(body) }),
+  setClipsFolder: (ids, body) => call("/api/clips/folder", { method: "POST", body: JSON.stringify({ ...body, ids }) }),
   emptyFolders: (sku, origin) => call(`/api/library/empty-folders?sku=${encodeURIComponent(sku || "")}&origin=${encodeURIComponent(origin || "")}`),
   saveEmptyFolders: (sku, origin, folders) => call("/api/library/empty-folders", { method: "PUT", body: JSON.stringify({ sku, origin, folders }) }),
   rules: () => call("/api/rules"),
