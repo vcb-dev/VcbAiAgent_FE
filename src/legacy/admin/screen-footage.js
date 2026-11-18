@@ -107,9 +107,22 @@ function cats(lib) {
 function skuClips(lib, sku = st.sku) {
   return productClips(lib, sku).filter(matchOrigin);
 }
+function skuBaseRows(lib) {
+  const rows = readyRows();
+  if (rows.length) return rows;
+  const skus = summaryRef.skus || {};
+  const keys = Object.keys(skus);
+  if (keys.length) return keys.map((sku) => ({ sku, name: "", clips: skus[sku], ready: true, thumb: "" }));
+  const n = new Map();
+  lib.forEach((c) => {
+    if (libOf(c) !== "product" || !c.product_set) return;
+    n.set(c.product_set, (n.get(c.product_set) || 0) + 1);
+  });
+  return [...n.entries()].map(([sku, clips]) => ({ sku, name: "", clips, ready: true, thumb: "" }));
+}
 function skuRows(lib, cov) {
   const q = st.q.trim().toLowerCase();
-  return readyRows().filter((r) => {
+  return skuBaseRows(lib).filter((r) => {
     if (st.cat && (r.category || skuKind(r.sku)) !== st.cat) return false;
     if (!q) return true;
     return `${r.sku} ${r.name || ""}`.toLowerCase().includes(q);
@@ -368,26 +381,51 @@ function stepBoards(clips) {
     const hit = Object.entries(STEP_VI).find(([, v]) => v === label);
     return hit ? hit[0] : "";
   };
-  const order = ["__unsorted", ...NEW_STEPS];
+  const extras = extraFolders
+    .map((f) => ({ idx: Number(f.idx) || 0, label: String(f.label || "").trim() }))
+    .filter((f) => f.label && f.label !== "Chưa xếp");
+  const extraLabels = new Set(extras.map((f) => f.label));
+  const customOf = (c) => {
+    const lb = String(c.step_label || "").trim();
+    if (extraLabels.has(lb)) return lb;
+    if ((c.craft_step === "__folder" || c.folder_step) && lb && lb !== "Chưa xếp") return lb;
+    return "";
+  };
   const rows = [];
-  order.forEach((step, i) => {
-    const list = clips.filter((c) => (step === "__unsorted" ? unsorted(c) : c.craft_step === step));
+  ["__unsorted", ...NEW_STEPS].forEach((step) => {
     const label = labelOf(step);
-    const kept = extraFolders.some((f) => String(f.label || "").trim() === label);
+    const list = clips.filter((c) => {
+      const custom = customOf(c);
+      if (custom && custom !== label) return false;
+      if (c.craft_step === "__folder") return false;
+      return step === "__unsorted" ? unsorted(c) : c.craft_step === step;
+    });
+    const kept = extraLabels.has(label);
     if (!list.length && !kept && step !== "__unsorted") return;
     if (!list.length && step === "__unsorted") return;
     rows.push({
-      drop: step, idx: i + 1, rawIdx: i + 1, label,
+      drop: step, label,
       tag: step === "__unsorted" ? "" : step, clips: list,
     });
   });
-  extraFolders.forEach((f) => {
-    const label = String(f.label || "").trim();
-    if (!label || label === "Chưa xếp") return;
-    if (rows.some((r) => r.label === label)) return;
+  const shown = new Set(rows.map((r) => r.label));
+  const addCustom = (label, list) => {
+    if (!label) return;
+    if (shown.has(label)) {
+      const row = rows.find((r) => r.label === label);
+      const seen = new Set(row.clips.map((c) => c.id));
+      row.clips = row.clips.concat(list.filter((c) => !seen.has(c.id)));
+      return;
+    }
     const tag = tagOf(label);
     const drop = tag && NEW_SET.has(tag) ? tag : "__folder";
-    rows.push({ drop, idx: rows.length + 1, rawIdx: rows.length + 1, label, tag, clips: [] });
+    rows.push({ drop, label, tag, clips: list });
+    shown.add(label);
+  };
+  extras.forEach((f) => addCustom(f.label, clips.filter((c) => customOf(c) === f.label || String(c.step_label || "").trim() === f.label)));
+  clips.forEach((c) => {
+    const lb = customOf(c);
+    if (lb && !shown.has(lb)) addCustom(lb, clips.filter((x) => customOf(x) === lb));
   });
   return rows.map((row, i) => ({ ...row, idx: i + 1, rawIdx: i + 1 }));
 }
@@ -523,7 +561,7 @@ export async function render(view, ctx) {
   let src = { configured: false };
   let cov = { rows: [], columns: [] };
   let summary = { huyk: 0, outro: 0, illus: 0, skus: {} };
-  const timed = (p, ms, fallback) => Promise.race([p, new Promise((res) => setTimeout(() => res(fallback), ms))]);
+  const folderMemo = new Map();
   let navGen = 0;
   const viewKey = () => {
     if (st.lib === "huyk" || st.origin === "huyk") return "huyk";
@@ -540,23 +578,24 @@ export async function render(view, ctx) {
     } catch { /* lưới vẫn vẽ từ coverage */ }
     lib = mergeLib();
     if (st.sku && isCraftOrigin()) {
-      extraFolders = (await api.emptyFolders(st.sku, st.origin).catch(() => ({ folders: [] }))).folders || [];
-      const clipLabels = new Set(skuClips(lib).map((c) => (unsorted(c) && !c.step_label ? "Chưa xếp" : (c.step_label || STEP_VI[c.craft_step] || "Chưa xếp"))));
-      const cleaned = extraFolders.filter((f) => {
-        const label = String(f.label || "").trim();
-        return label && label !== "Chưa xếp" && !clipLabels.has(label);
-      });
-      if (cleaned.length !== extraFolders.length) {
-        extraFolders = cleaned;
-        await api.saveEmptyFolders(st.sku, st.origin, extraFolders).catch(() => {});
+      const key = `${st.sku}|${st.origin}`;
+      if (folderMemo.has(key)) extraFolders = folderMemo.get(key).slice();
+      else {
+        const fromApi = (await api.emptyFolders(st.sku, st.origin).catch(() => ({ folders: [] }))).folders || [];
+        extraFolders = fromApi
+          .map((f) => ({ idx: Number(f.idx) || 0, label: String(f.label || "").trim() }))
+          .filter((f) => f.label && f.label !== "Chưa xếp");
+        folderMemo.set(key, extraFolders.slice());
       }
-    } else extraFolders = [];
+    }
     st._loading = false;
   };
   const go = (fn) => {
+    if (st.sku && isCraftOrigin()) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
     const prev = `${st.lib}|${st.sku}|${st.origin}`;
     fn?.();
-    if (`${st.lib}|${st.sku}|${st.origin}` !== prev) extraFolders = [];
+    const next = `${st.sku}|${st.origin}`;
+    extraFolders = folderMemo.get(next) || (`${st.lib}|${st.sku}|${st.origin}` === prev ? extraFolders : []);
     const key = viewKey();
     st._loading = !!(key && !pools.has(key));
     const gen = ++navGen;
@@ -565,8 +604,9 @@ export async function render(view, ctx) {
   };
   const persistFolders = async () => {
     extraFolders = stepBoards(boardClips(lib))
-      .filter((r) => !r.clips.length && r.label !== "Chưa xếp")
+      .filter((r) => r.label !== "Chưa xếp" && (r.drop === "__folder" || !r.clips.length))
       .map((r) => ({ idx: r.rawIdx, label: r.label }));
+    if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
     try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
   };
   const folderClips = (idx, label) => {
@@ -574,14 +614,13 @@ export async function render(view, ctx) {
       || (Number.isFinite(idx) && Number(r.rawIdx) === Number(idx) && r.label === label));
     return row ? row.clips : [];
   };
-  const existingStep = (el) => {
-    if (!el?.classList?.contains("fstep")) return null;
-    const step = el.dataset.dropStep;
-    const idx = Number(el.dataset.dropIdx);
-    const label = el.dataset.dropLabel || "";
-    if (!label) return null;
-    const ok = stepBoards(boardClips(lib)).some((r) => r.label === label);
-    return ok ? { el, step, idx, label } : null;
+  const existingStep = (node) => {
+    if (!node?.classList?.contains("fstep")) return null;
+    const step = node.dataset.dropStep;
+    const idx = Number(node.dataset.dropIdx);
+    const label = node.dataset.dropLabel || "";
+    if (!label || step == null || step === "") return null;
+    return { el: node, step, idx, label };
   };
   const boardIds = () => stepBoards(boardClips(lib)).flatMap((r) => r.clips.map((c) => c.id));
   const toggleTick = (id, ev) => {
@@ -601,7 +640,12 @@ export async function render(view, ctx) {
     st.lastTick = id;
   };
   const moveClips = async (ids, step, idx, label) => {
-    const craft = NEW_SET.has(step) || step === "__unsorted" ? step : undefined;
+    const craft = NEW_SET.has(step) || step === "__unsorted" ? step : (step === "__folder" ? "__folder" : undefined);
+    if (label && label !== "Chưa xếp" && !extraFolders.some((f) => f.label === label)
+      && (step === "__folder" || !NEW_SET.has(step))) {
+      extraFolders = [...extraFolders, { idx, label }];
+      if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
+    }
     const clips = [];
     for (const id of ids) {
       const clip = lib.find((c) => c.id === id);
@@ -617,7 +661,7 @@ export async function render(view, ctx) {
       c.step_index = idx;
     }
     st.boardErr = "";
-    paint();
+    paintList();
     try {
       await api.setClipsFolder(clips.map((c) => c.id), { step_index: idx, step_label: label, craft_step: craft });
       await persistFolders();
@@ -645,6 +689,7 @@ export async function render(view, ctx) {
       const used = stepBoards(boardClips(lib)).map((r) => Number(r.idx) || 0);
       const idx = Math.max(0, ...used, ...extraFolders.map((f) => Number(f.idx) || 0)) + 1;
       extraFolders = [...extraFolders, { idx, label: name }];
+      if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
       try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); st.composer = null; }
       catch (err) { st.composer = { ...cm, name, err: err.message }; }
       paint();
@@ -666,6 +711,13 @@ export async function render(view, ctx) {
     } catch (err) { st.composer = { ...cm, name, err: err.message }; }
     paint();
   };
+  const scrollHost = () => el.closest("#view") || el.closest(".main");
+  const paintList = () => {
+    const box = el.querySelector("#fgrid");
+    if (!box) { paint(); return; }
+    box.innerHTML = grid(lib);
+    watchMore();
+  };
   const paint = () => {
     covRef = cov || { rows: [], columns: [] };
     if (st.lib === "huyk_sp" || st.lib === "tho" || st.lib === "craft") {
@@ -677,6 +729,7 @@ export async function render(view, ctx) {
     const board = st.lib === "product" && st.sku && isCraftOrigin();
     const sideTop = el.querySelector(".side-l")?.scrollTop || 0;
     const mainTop = el.querySelector("#fmain")?.scrollTop || 0;
+    const hostTop = scrollHost()?.scrollTop || 0;
     const winTop = window.scrollY;
     el.innerHTML = `${header(lib, src)}<div class="split${board ? " board" : ""}">
       <aside class="side-l" aria-label="Nhóm">${board ? "" : sideList(lib, gs)}</aside>
@@ -686,14 +739,16 @@ export async function render(view, ctx) {
       if (side) side.scrollTop = sideTop;
       const main = el.querySelector("#fmain");
       if (main) main.scrollTop = mainTop;
+      const host = scrollHost();
+      if (host) host.scrollTop = hostTop;
       if (winTop) window.scrollTo(0, winTop);
     };
     restoreScroll();
-    requestAnimationFrame(restoreScroll);
+    requestAnimationFrame(() => requestAnimationFrame(restoreScroll));
     watchMore();
     const inp = el.querySelector("#f-step-name");
     if (inp && (st.composer?.kind === "add" || st.composer?.kind === "edit")) {
-      inp.focus();
+      inp.focus({ preventScroll: true });
       const pos = inp.value.length;
       try { inp.setSelectionRange(pos, pos); } catch { /* ignore */ }
     }
@@ -724,11 +779,12 @@ export async function render(view, ctx) {
     const gen = ++navGen;
     st._loading = true;
     paint();
+    const keep = (p, fallback) => p.catch(() => fallback);
     [src, cov, usage, summary] = await Promise.all([
-      timed(api.sourceStatus().catch(() => ({ configured: false })), 8000, { configured: false }),
-      timed(api.coverage().catch(() => ({ rows: [], columns: [] })), 15000, { rows: [], columns: [] }),
-      timed(api.footageUsage().catch(() => ({})), 8000, {}),
-      timed(api.librarySummary().catch(() => ({ huyk: 0, outro: 0 })), 8000, { huyk: 0, outro: 0 }),
+      keep(api.sourceStatus(), src),
+      keep(api.coverage(), cov),
+      keep(api.footageUsage(), usage),
+      keep(api.librarySummary(), summary),
     ]);
     summaryRef = summary || summaryRef;
     if (gen !== navGen) return;
@@ -762,7 +818,7 @@ export async function render(view, ctx) {
     });
     if (bad) {
       st.boardErr = "Chỉ kéo clip của đúng mã và nguồn đang mở";
-      paint();
+      paintList();
       return;
     }
     try {
@@ -770,7 +826,7 @@ export async function render(view, ctx) {
       const n = await moveClips(ids, step, idx, label);
       if (n) toast(n > 1 ? `Đã chuyển ${n} clip → ${label}` : `Đã chuyển sang ${label}`);
     } catch { /* boardErr set */ }
-    paint();
+    paintList();
   };
   const startDrag = (e) => {
     if (!drag.ready || drag.on) return;
@@ -824,7 +880,7 @@ export async function render(view, ctx) {
     e.preventDefault();
     moveGhost(e);
   };
-  const paneScroll = () => el.closest(".split > .list") || el.closest(".list");
+  const paneScroll = () => el.querySelector("#fmain") || scrollHost();
   const onWheel = (e) => {
     const strip = e.target.closest(".fstrip");
     if (!strip) return;
@@ -886,6 +942,7 @@ export async function render(view, ctx) {
     if (libk === "huyk" || libk === "outro" || libk === "illus") pull(libk, { library: libk }).catch(() => {});
   });
   el.addEventListener("click", async (e) => {
+    if (dragging || drag.on) { e.preventDefault(); e.stopPropagation(); return; }
     const box = e.target.closest("[data-check]");
     if (box) {
       e.preventDefault();
