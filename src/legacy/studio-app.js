@@ -49,21 +49,36 @@ async function applyDeepLink() {
 
 let started = false;
 
+const EMPTY_BOOT = {
+  library: [], products: [], templates: [], samples: [], clip_count: 0, music: [],
+  emotions: {}, settings_defaults: {}, claude_available: false, eleven_available: false, omni: { ready: false },
+};
+
+function applyBoot(b) {
+  if (!b || typeof b !== "object") return;
+  const lib = store.boot?.library || [];
+  store.boot = { ...EMPTY_BOOT, ...store.boot, ...b, library: lib };
+  const sel = $("product-select");
+  if (sel && (store.boot.products || []).length) {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">— Không gắn sản phẩm —</option>${store.boot.products.map((p) =>
+      `<option value="${esc(p.sku)}">${esc(p.sku)} · ${esc((p.name || "").replace(/-/g, " "))} (${p.clips || 0} clip)</option>`).join("")}`;
+    if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
+  }
+  const tpl = $("template-select");
+  if (tpl && (store.boot.templates || []).length && tpl.options.length < 3) {
+    const cur = tpl.value;
+    tpl.innerHTML = `<option value="auto">Tự động</option>${store.boot.templates.map((t) =>
+      `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join("")}`;
+    tpl.value = cur || "auto";
+  }
+  emit();
+}
+
 export async function startStudio() {
   if (started) return;
   started = true;
-  const tabs = $("lib-tabs");
-  if (tabs && !tabs.childElementCount) {
-    tabs.innerHTML = '<span class="muted" style="padding:10px 12px">Đang tải Studio…</span>';
-  }
-  try {
-    store.boot = await api.bootstrap(true);
-    store.boot.library = store.boot.library || [];
-  } catch (err) {
-    started = false;
-    if (tabs) tabs.innerHTML = "";
-    throw err;
-  }
+  store.boot = { ...EMPTY_BOOT };
   initLibrary();
   initInspector();
   initPlayer();
@@ -88,6 +103,11 @@ export async function startStudio() {
   $("tl-zoom").addEventListener("input", (e) => { store.zoom = Number(e.target.value); emit(); });
   subscribe((s) => { renderTopbar(s); renderLibrary(s); renderInspector(s); renderTimeline($("timeline"), s); renderPlayer(s); renderExportMenu(s); });
   emit();
+  api.bootstrap(true).then(applyBoot).catch(() => {});
+  api.librarySkus().then((snap) => {
+    if (!snap?.rows?.length) return;
+    applyBoot({ products: snap.rows.map((r) => ({ sku: r.sku, name: r.name || r.sku, clips: r.clips || 0, steps: [], ready: true })) });
+  }).catch(() => {});
   await applyDeepLink();
   window.addEventListener("resize", () => emit());
   document.addEventListener("keydown", (e) => {                 // CapCut shortcuts: Ctrl+B split, Delete removes shot, Ctrl+Z undo

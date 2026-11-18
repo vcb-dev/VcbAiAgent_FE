@@ -95,10 +95,10 @@ async function openScreen(view, bar, state, pathname) {
   stage.innerHTML = `<div class="page"><p class="muted pad">Đang tải…</p></div>`;
   const late = setTimeout(swap, 400);
   try {
-    if (!boot.current) await ensureBoot();
+    if (!boot.current) ensureBoot();
     const mod = await SCREENS[key]();
     await mod.render(stage, {
-      boot: boot.current,
+      boot: boot.current || { ...EMPTY_BOOT },
       params,
       refreshBadges: refreshRailBadges,
       setCleanup: (fn) => { entry.cleanup = fn; },

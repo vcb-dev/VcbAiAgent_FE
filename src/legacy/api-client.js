@@ -27,6 +27,7 @@ export const api = {
     return call(qs ? `/api/library?${qs}` : "/api/library");
   },
   librarySummary: () => call("/api/library/summary"),
+  librarySkus: () => call("/api/library/skus"),
   createJob: (body) => call("/api/jobs", { method: "POST", body: JSON.stringify(body) }),
   getJob: (id) => call(job(id)),
   jobStatus: (id) => call(`${job(id)}/status`),
