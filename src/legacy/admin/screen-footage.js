@@ -356,20 +356,23 @@ const moreRow = (shown, total) => (total > shown ? `<div class="pager fmore" sty
 const phImg = (thumb) => (thumb
   ? `<img src="${esc(media(thumb))}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
   : "");
+const skuPh = (thumb) => (thumb
+  ? `<img src="${esc(media(thumb))}" alt="" loading="lazy" decoding="async" onerror="this.closest('.skucard')?.classList.add('no-ph');this.remove()">`
+  : "");
 const listIc = (thumb) => `<span class="ic">${ICON}${phImg(thumb)}</span>`;
 function skuCard(g) {
-  return `<button type="button" class="skucard" data-sku="${esc(g.key)}">
-      <span class="sku-ph">${phImg(g.thumb)}</span>
+  return `<button type="button" class="skucard${g.thumb ? "" : " no-ph"}" data-sku="${esc(g.key)}">
+      <span class="tmb">${skuPh(g.thumb)}<span class="tc">${g.n} clip</span></span>
       <span class="skumeta"><b class="mono">${esc(g.label)}</b>
-        <span class="muted small">${esc(g.sub || "—")}</span></span>
-      <span class="skun">${g.n}</span></button>`;
+        <span class="muted small">${esc(g.sub || "—")}</span>
+        <span class="skun">${g.n} clip</span></span></button>`;
 }
 function originCard(g) {
-  return `<button type="button" class="skucard" data-origin="${esc(g.key)}">
-      <span class="sku-ph">${phImg(g.thumb)}</span>
+  return `<button type="button" class="skucard${g.thumb ? "" : " no-ph"}" data-origin="${esc(g.key)}">
+      <span class="tmb">${skuPh(g.thumb)}<span class="tc">${g.n} clip</span></span>
       <span class="skumeta"><b>${esc(g.label)}</b>
-        <span class="muted small">${esc(g.sub || "")}</span></span>
-      <span class="skun">${g.n}</span></button>`;
+        <span class="muted small">${esc(g.sub || "")}</span>
+        <span class="skun">${g.n} clip</span></span></button>`;
 }
 function boardClips(lib) {
   let list = skuClips(lib);

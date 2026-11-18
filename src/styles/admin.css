@@ -92,16 +92,19 @@ table.t tr:hover td { background: var(--pane-2); }
 
 /* clip grid (footage) */
 .cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.sku-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-.skucard { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--pane);
-  overflow: hidden; display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; color: inherit; min-height: 56px; }
+.sku-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; align-items: start; }
+.skucard { text-align: left; padding: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--pane);
+  overflow: hidden; display: flex; flex-direction: column; align-items: stretch; cursor: pointer; color: inherit; min-width: 0; }
 .skucard:hover { border-color: var(--accent); }
-.sku-ph { width: 40px; height: 56px; flex: 0 0 40px; border-radius: 6px; background: var(--chip-bg); overflow: hidden; }
-.sku-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sku-ph:empty, .sku-ph:not(:has(img)) { display: none; }
-.skucard .skumeta { padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.skucard .skumeta b { font-size: 14px; }
-.skucard .skun { font: 500 12px var(--mono); color: var(--muted); flex: none; }
+.skucard .tmb { aspect-ratio: 3 / 4; border-radius: 0; width: 100%; background: var(--chip-bg); }
+.skucard .skumeta { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.skucard .skumeta b { font-size: 13px; line-height: 1.2; }
+.skucard .skumeta .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skucard .skun { display: none; font: 500 12px var(--mono); color: var(--muted); }
+.skucard.no-ph { padding: 12px; }
+.skucard.no-ph .tmb { display: none; }
+.skucard.no-ph .skumeta { padding: 0; }
+.skucard.no-ph .skun { display: block; }
 .cclip { text-align: left; padding: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--pane); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
 .cclip:hover, .cclip.sel { border-color: var(--accent); }
 .cclip .tmb { border-radius: 0; aspect-ratio: 9/14; }
@@ -132,7 +135,8 @@ body.clip-dragging .fstep-act { pointer-events: none; }
   color: #fff; font: 700 13px var(--sans); pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
 .lrow .ic { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 8px; background: var(--chip-bg); display: grid; place-items: center; color: var(--accent); overflow: hidden; position: relative; }
 .lrow .ic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.lrow .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.lrow .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lrow .bd > .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lrow .t1 { display: flex; justify-content: space-between; gap: 6px; }
 .lrow .t1 b { font-weight: 600; font-size: 12.5px; } .lrow .t1 b.mono { font: 500 12px var(--mono); }
 .covbar { display: flex; gap: 2px; } .covbar i { flex: 1; height: 4px; border-radius: 2px; background: var(--line-2); } .covbar i.on { background: var(--accent); }
