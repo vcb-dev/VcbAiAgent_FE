@@ -176,6 +176,6 @@ export function toast(msg, isErr = false) {
 
 /** Thumbnail <img> that falls back to a neutral tile when the media file is missing (fresh clone, no proxies). */
 export const thumbImg = (path, alt = "", cls = "") =>
-  `<img class="${cls}" src="${esc(media(path))}" alt="${esc(alt)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls}',style:'display:block;width:100%;height:100%;background:var(--thumb)'}))">`;
+  `<img class="${cls}" src="${esc(media(path))}" alt="${esc(alt)}" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls}',style:'display:block;width:100%;height:100%;background:var(--thumb)'}))">`;
 
 export const usd = (v) => money(v);

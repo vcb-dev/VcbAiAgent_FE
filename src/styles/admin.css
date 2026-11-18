@@ -900,6 +900,8 @@ summary.rs-h { cursor: pointer; }
 /* Kho footage · công đoạn: một hàng mỗi bước, clip xếp ngang. Màu lấy từ theme, không nền đen. */
 .fscreen .split.board > .side-l { display: none; }
 .fboard { display: flex; flex-direction: column; gap: 12px; }
+.fboard .cclip { contain: content; }
+.fmore-strip { flex: none; align-self: center; min-height: 72px; }
 .ftools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ftools .sp { flex: 1; }
 .fadd, .fedit { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -911,7 +913,8 @@ summary.rs-h { cursor: pointer; }
 .ferr { margin: 0; width: 100%; font-size: 13px; color: var(--bad, #b42318); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .fstep { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 14px; align-items: start;
-  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane);
+  content-visibility: auto; contain-intrinsic-size: auto 140px; }
 .fstep.drop-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .fstep-h { display: flex; gap: 10px; align-items: flex-start; min-width: 0; flex-wrap: wrap; }
 .fstep-act { margin-left: auto; display: flex; gap: 6px; flex: none; }
@@ -928,13 +931,15 @@ summary.rs-h { cursor: pointer; }
 
 /* Kho footage: one screen high on desktop — the product list (left) and the clip grid scroll on their own */
 @media (min-width: 1000px) {
-  .fscreen { display: flex; flex-direction: column; flex: 1; min-height: 0; height: 100%; max-height: 100%; overflow: hidden; }
+  .fscreen { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: 100vh; max-height: 100dvh; overflow: hidden; }
   .fscreen > .page { flex: 1 1 auto; min-height: 0; overflow: hidden; }
   .fscreen > .page > #board { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .fscreen .kanban { flex: 1 1 auto; min-height: 0; align-items: stretch; overflow-x: auto; overflow-y: hidden; }
   .fscreen .kcol { overflow-y: auto; overscroll-behavior: contain; padding-bottom: 16px; }
-  .fscreen > .split { flex: 1 1 auto; min-height: 0; height: auto; flex-wrap: nowrap; align-items: stretch; gap: 0; }
-  .fscreen > .split > .side-l, .fscreen > .split > .list { height: 100%; overflow: auto; overscroll-behavior: contain; }
+  .fscreen > .split { flex: 1 1 auto; min-height: 0; height: auto; overflow: hidden; flex-wrap: nowrap; align-items: stretch; gap: 0; }
+  .fscreen > .split > .side-l, .fscreen > .split > .list {
+    height: auto; min-height: 0; flex: 1 1 auto; overflow: auto; overscroll-behavior: contain;
+  }
 }
 @media (max-width: 1000px) { .fscreen > .split > .side-l { max-height: 42vh; overflow: auto; overscroll-behavior: contain; } }
 /* times a clip was used in videos, bottom-left of the thumbnail (duration is bottom-right) */

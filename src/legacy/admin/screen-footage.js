@@ -2,7 +2,7 @@
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
-  hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
+  hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "", expand: new Set() };
 const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
 const batchIds = (id) => {
   if (!st.checked.size) return [id];
@@ -334,6 +334,7 @@ function mainHead(lib, gs) {
 }
 let usage = {};
 const PAGE = 60;
+const STRIP = 20;
 function card(c, lb) {
   const [n, done] = usage[c.id] || [0, 0];
   const tick = canSort() && st.checked.has(c.id);
@@ -429,6 +430,14 @@ function stepBoards(clips) {
   });
   return rows.map((row, i) => ({ ...row, idx: i + 1, rawIdx: i + 1 }));
 }
+function stripHtml(row) {
+  const list = row.clips || [];
+  if (!list.length) return `<span class="muted small">Kéo clip vào đây</span>`;
+  const open = st.expand.has(row.label);
+  const shown = open ? list : list.slice(0, STRIP);
+  const rest = list.length - shown.length;
+  return `${shown.map((c) => card(c, LB(c))).join("")}${rest ? `<button type="button" class="pill fmore-strip" data-strip-more="${esc(row.label)}">+${rest}</button>` : ""}`;
+}
 function craftBoard(lib) {
   const rows = stepBoards(boardClips(lib));
   const cm = st.composer || {};
@@ -478,7 +487,7 @@ function craftBoard(lib) {
         ${title}
         <span class="fstep-act">${act}</span>
       </div>
-      <div class="fstrip">${row.clips.length ? row.clips.map((c) => card(c, LB(c))).join("") : `<span class="muted small">Kéo clip vào đây</span>`}</div>
+      <div class="fstrip">${stripHtml(row)}</div>
     </section>`;
   }).join("");
   return `<div class="fboard">${tools}${body}</div>`;
@@ -552,7 +561,7 @@ export async function render(view, ctx) {
   };
   const pull = async (key, params) => {
     if (pools.has(key)) return pools.get(key);
-    const { clips } = await api.library({ limit: 400, ...params });
+    const { clips } = await api.library({ limit: 800, ...params });
     pools.set(key, clips || []);
     return clips || [];
   };
@@ -567,6 +576,7 @@ export async function render(view, ctx) {
     if (st.lib === "huyk" || st.origin === "huyk") return "huyk";
     if (st.lib === "outro" || st.origin === "outro") return "outro";
     if (st.lib === "illus") return "illus";
+    if (st.sku && st.origin && isCraftOrigin()) return `sku:${st.sku}:${st.origin}`;
     if (st.sku) return `sku:${st.sku}`;
     return "";
   };
@@ -574,7 +584,8 @@ export async function render(view, ctx) {
     try {
       const key = viewKey();
       if (key === "huyk" || key === "outro" || key === "illus") await pull(key, { library: key });
-      else if (st.sku) await pull(`sku:${st.sku}`, { sku: st.sku });
+      else if (st.sku && st.origin && isCraftOrigin()) await pull(key, { sku: st.sku, origin: st.origin, limit: 800 });
+      else if (st.sku) await pull(key, { sku: st.sku, limit: 800 });
     } catch { /* lưới vẫn vẽ từ coverage */ }
     lib = mergeLib();
     if (st.sku && isCraftOrigin()) {
@@ -661,10 +672,10 @@ export async function render(view, ctx) {
       c.step_index = idx;
     }
     st.boardErr = "";
-    paintList();
+    if (!relocateClips(ids, label)) paintList();
     try {
       await api.setClipsFolder(clips.map((c) => c.id), { step_index: idx, step_label: label, craft_step: craft });
-      await persistFolders();
+      persistFolders();
       return clips.length;
     } catch (err) {
       for (const p of prev) {
@@ -717,6 +728,28 @@ export async function render(view, ctx) {
     if (!box) { paint(); return; }
     box.innerHTML = grid(lib);
     watchMore();
+  };
+  const relocateClips = (ids, label) => {
+    const destSec = el.querySelector(`section.fstep[data-drop-label="${CSS.escape(label)}"]`);
+    const dest = destSec?.querySelector(".fstrip");
+    if (!dest) return false;
+    dest.querySelector(":scope > .muted")?.remove();
+    const moved = [];
+    ids.forEach((id) => {
+      const n = el.querySelector(`[data-clip="${CSS.escape(id)}"]`);
+      if (n) { dest.appendChild(n); n.classList.remove("dragging"); moved.push(n); }
+    });
+    el.querySelectorAll("section.fstep").forEach((sec) => {
+      const strip = sec.querySelector(".fstrip");
+      const n = strip?.querySelectorAll("[data-clip]").length || 0;
+      const lab = sec.querySelector(".fstep-t .muted");
+      if (lab && !lab.textContent.includes("chuyển về")) lab.textContent = `${n} clip`;
+      if (strip && !n && !strip.querySelector(".muted") && !strip.querySelector("[data-clip]")) {
+        strip.innerHTML = `<span class="muted small">Kéo clip vào đây</span>`;
+      }
+    });
+    syncTicks();
+    return moved.length > 0;
   };
   const paint = () => {
     covRef = cov || { rows: [], columns: [] };
@@ -825,8 +858,7 @@ export async function render(view, ctx) {
       ids.forEach((id) => st.checked.delete(id));
       const n = await moveClips(ids, step, idx, label);
       if (n) toast(n > 1 ? `Đã chuyển ${n} clip → ${label}` : `Đã chuyển sang ${label}`);
-    } catch { /* boardErr set */ }
-    paintList();
+    } catch { paintList(); }
   };
   const startDrag = (e) => {
     if (!drag.ready || drag.on) return;
@@ -851,8 +883,8 @@ export async function render(view, ctx) {
     if (!drag.ghost) return;
     drag.ghost.style.left = `${e.clientX + 14}px`;
     drag.ghost.style.top = `${e.clientY + 14}px`;
-    el.querySelectorAll(".drop-on").forEach((x) => x.classList.remove("drop-on"));
     const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("section.fstep[data-drop-step]");
+    if (drag.row && drag.row !== hit) drag.row.classList.remove("drop-on");
     const dest = existingStep(hit);
     if (dest) dest.el.classList.add("drop-on");
     drag.row = dest?.el || null;
@@ -878,7 +910,12 @@ export async function render(view, ctx) {
     }
     if (!drag.on) return;
     e.preventDefault();
-    moveGhost(e);
+    if (drag._raf) return;
+    drag._e = e;
+    drag._raf = requestAnimationFrame(() => {
+      drag._raf = 0;
+      if (drag.on && drag._e) moveGhost(drag._e);
+    });
   };
   const paneScroll = () => el.querySelector("#fmain") || scrollHost();
   const onWheel = (e) => {
@@ -886,21 +923,23 @@ export async function render(view, ctx) {
     if (!strip) return;
     const dx = e.deltaX;
     const dy = e.deltaY;
-    const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? strip.clientHeight : 1;
-    if (e.shiftKey && !dx) {
-      strip.scrollLeft += dy * line;
+    const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 40 : 1;
+    if (e.shiftKey || Math.abs(dx) > Math.abs(dy)) {
+      strip.scrollLeft += (dx || dy) * line;
       e.preventDefault();
       return;
     }
-    if (Math.abs(dy) >= Math.abs(dx)) {
-      const pane = paneScroll();
-      if (!pane) return;
-      pane.scrollTop += dy * line;
+    const panes = [el.querySelector("#fmain"), scrollHost(), document.scrollingElement].filter(Boolean);
+    const delta = dy * line;
+    for (const pane of panes) {
+      const max = pane.scrollHeight - pane.clientHeight;
+      if (max <= 1) continue;
+      const next = Math.max(0, Math.min(max, pane.scrollTop + delta));
+      if (next === pane.scrollTop) continue;
+      pane.scrollTop = next;
       e.preventDefault();
       return;
     }
-    strip.scrollLeft += dx * line;
-    e.preventDefault();
   };
   const onUp = () => {
     const row = drag.row;
@@ -980,6 +1019,11 @@ export async function render(view, ctx) {
     }
     if (t.dataset.origin !== undefined) {
       go(() => { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; clearTicks(); });
+      return;
+    }
+    if (t.dataset.stripMore !== undefined) {
+      st.expand.add(t.dataset.stripMore);
+      paintList();
       return;
     }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
@@ -1067,7 +1111,7 @@ export async function render(view, ctx) {
     if (src.state === "scanning") wasBusy = true;
     src = await api.sourceStatus().catch(() => src);
     const b = el.querySelector("#src-scan");
-    if (b && src.state === "scanning") { b.disabled = true; b.textContent = scanLabel(lib, src); if (!el.querySelector("#src-cancel") && !st.composer) paint(); }
+    if (b && src.state === "scanning") { b.disabled = true; b.textContent = scanLabel(lib, src); }
     if (src.state === "scanning" && Date.now() - lastReload > 45000 && !st.picked && !st.composer) await reloadLib();
     if (wasBusy && src.state !== "scanning") { await reloadLib(); toast(src.state === "cancelled" ? `Đã hủy quét · giữ ${src.clips} clip` : `Đã quét xong · ${src.clips} clip`); }
     wasBusy = src.state === "scanning";
