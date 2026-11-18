@@ -271,14 +271,14 @@ function sideList(lib, gs) {
           <span class="muted small">${esc(originLabel(st.origin))} · ${esc(meta?.name || "")}</span></span></div>`;
     if (isCraftOrigin()) {
       const rows = gs.map((g) => `<button type="button" class="lrow${st.step === g.key ? " on" : ""}${g.n ? "" : " empty"}" data-step="${esc(g.key)}" data-drop-step="${esc(g.key)}">
-        <span class="ic">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}</span>
+        ${listIc(g.thumb)}
         <span class="bd"><span class="t1"><b>${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
           <span class="muted small">${esc(g.sub || "")}</span></span></button>`).join("");
       return `${back}<button type="button" class="lrow${!st.step ? " on" : ""}" data-step=""><span class="ic">${ICON}</span><span class="bd"><span class="t1"><b>Tất cả clip nguồn này</b></span></span></button>${rows}`;
     }
     const allKey = st.origin === "final" ? "data-step=\"\"" : "data-group=\"\"";
     const rows = gs.map((g) => `<button type="button" class="lrow${st.group === g.key ? " on" : ""}" data-group="${esc(g.key)}">
-      <span class="ic">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}</span>
+      ${listIc(g.thumb)}
       <span class="bd"><span class="t1"><b>${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span></span></button>`).join("");
     return `${back}<button type="button" class="lrow${!st.group ? " on" : ""}" ${allKey}><span class="ic">${ICON}</span><span class="bd"><span class="t1"><b>Tất cả clip nguồn này</b></span></span></button>${rows}`;
   }
@@ -290,13 +290,13 @@ function sideList(lib, gs) {
         <span class="bd"><span class="t1"><b class="mono">${esc(st.sku)}</b></span>
           <span class="muted small">${esc(meta?.name || "")}</span></span></div>`;
     const rows = gs.map((g) => `<button type="button" class="lrow${g.n ? "" : " empty"}" data-origin="${esc(g.key)}">
-      <span class="ic">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}</span>
+      ${listIc(g.thumb)}
       <span class="bd"><span class="t1"><b>${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
         <span class="muted small">${esc(g.sub || "")}</span></span></button>`).join("");
     return `${back}${rows}`;
   }
   const row = (g) => `<button type="button" class="lrow${(st.lib === "product" ? st.sku : st.group) === g.key ? " on" : ""}${g.n ? "" : " empty"}" data-${st.lib === "product" ? "sku" : "group"}="${esc(g.key)}">
-    <span class="ic">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}</span>
+    ${listIc(g.thumb)}
     <span class="bd"><span class="t1"><b class="${st.lib === "product" ? "mono" : ""}">${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
       ${g.sub ? `<span class="muted small">${esc(g.sub)}</span>` : ""}</span></button>`;
   const all = st.lib === "product" ? "" : `<button type="button" class="lrow${!st.group ? " on" : ""}" data-group=""><span class="ic">${ICON}</span><span class="bd"><span class="t1"><b>Tất cả</b></span></span></button>`;
@@ -353,21 +353,23 @@ const LB = (c) => (c?.library === "broll" ? "SƯU TẦM" : libOf(c) === "outro" 
   : isFinished(c) || st.origin === "final" ? "HOÀN THIỆN" : originOf(c) === "huyk_sp" ? "HUYK CT" : originOf(c) === "tho" ? "THỢ" : isCraft(c) ? "CHẾ TÁC" : "SP");
 const moreRow = (shown, total) => (total > shown ? `<div class="pager fmore" style="justify-content:center"><span class="muted small">${shown}/${total} · kéo xuống để xem thêm</span></div>` : total > PAGE ? `<div class="pager" style="justify-content:center"><span class="muted small">Đã hiện hết ${total} clip</span></div>` : "");
 
+const phImg = (thumb) => (thumb
+  ? `<img src="${esc(media(thumb))}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
+  : "");
+const listIc = (thumb) => `<span class="ic">${ICON}${phImg(thumb)}</span>`;
 function skuCard(g) {
   return `<button type="button" class="skucard" data-sku="${esc(g.key)}">
-      <span class="tmb">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}
-        <span class="tc">${g.n} clip</span></span>
+      <span class="sku-ph">${phImg(g.thumb)}</span>
       <span class="skumeta"><b class="mono">${esc(g.label)}</b>
-        <span class="muted small">${esc(g.sub || "—")}</span>
-      </span></button>`;
+        <span class="muted small">${esc(g.sub || "—")}</span></span>
+      <span class="skun">${g.n}</span></button>`;
 }
 function originCard(g) {
   return `<button type="button" class="skucard" data-origin="${esc(g.key)}">
-      <span class="tmb">${g.thumb ? `<img src="${esc(media(g.thumb))}" alt="" loading="lazy" onerror="this.remove()">` : ICON}
-        <span class="tc">${g.n} clip</span></span>
+      <span class="sku-ph">${phImg(g.thumb)}</span>
       <span class="skumeta"><b>${esc(g.label)}</b>
-        <span class="muted small">${esc(g.sub || "")}</span>
-      </span></button>`;
+        <span class="muted small">${esc(g.sub || "")}</span></span>
+      <span class="skun">${g.n}</span></button>`;
 }
 function boardClips(lib) {
   let list = skuClips(lib);

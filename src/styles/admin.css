@@ -92,12 +92,16 @@ table.t tr:hover td { background: var(--pane-2); }
 
 /* clip grid (footage) */
 .cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-.sku-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }
-.skucard { text-align: left; padding: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--pane); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; color: inherit; }
+.sku-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.skucard { text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--pane);
+  overflow: hidden; display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; color: inherit; min-height: 56px; }
 .skucard:hover { border-color: var(--accent); }
-.skucard .tmb { border-radius: 0; aspect-ratio: 9/12; }
-.skucard .skumeta { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.sku-ph { width: 40px; height: 56px; flex: 0 0 40px; border-radius: 6px; background: var(--chip-bg); overflow: hidden; }
+.sku-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sku-ph:empty, .sku-ph:not(:has(img)) { display: none; }
+.skucard .skumeta { padding: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .skucard .skumeta b { font-size: 14px; }
+.skucard .skun { font: 500 12px var(--mono); color: var(--muted); flex: none; }
 .cclip { text-align: left; padding: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--pane); overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
 .cclip:hover, .cclip.sel { border-color: var(--accent); }
 .cclip .tmb { border-radius: 0; aspect-ratio: 9/14; }
@@ -126,8 +130,8 @@ body.clip-dragging .fstep-act { pointer-events: none; }
   background: var(--active-bg, rgba(184,137,44,.12)); border: 1px solid var(--accent); font-size: 13px; }
 .cdrag-ghost { position: fixed; z-index: 80; left: 0; top: 0; padding: 8px 12px; border-radius: 8px; background: var(--accent, #b8892c);
   color: #fff; font: 700 13px var(--sans); pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
-.lrow .ic { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 8px; background: var(--thumb); display: grid; place-items: center; color: var(--accent); overflow: hidden; }
-.lrow .ic img { width: 100%; height: 100%; object-fit: cover; }
+.lrow .ic { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 8px; background: var(--chip-bg); display: grid; place-items: center; color: var(--accent); overflow: hidden; position: relative; }
+.lrow .ic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .lrow .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .lrow .t1 { display: flex; justify-content: space-between; gap: 6px; }
 .lrow .t1 b { font-weight: 600; font-size: 12.5px; } .lrow .t1 b.mono { font: 500 12px var(--mono); }
