@@ -4,6 +4,12 @@ import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
   board: "index", shoot: "", hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
 const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
+const batchIds = (id) => {
+  if (!st.checked.size) return [id];
+  const ids = [...st.checked];
+  if (id && !st.checked.has(id)) ids.push(id);
+  return ids;
+};
 const LIBS = { product: "Sản phẩm", huyk: "HuyK", illus: "Minh hoạ AI", outro: "Outro" };
 const KINDS = [{ key: "nhan", label: "Nhẫn" }, { key: "lac_tay", label: "Lắc tay" },
   { key: "bong_tai", label: "Bông tai" }, { key: "day_chuyen", label: "Dây chuyền" }];
@@ -735,52 +741,63 @@ export async function render(view, ctx) {
     } catch { /* boardErr set */ }
     paint();
   };
-  el.addEventListener("pointerdown", (e) => {
-    if (e.button) return;
-    if (e.target.closest("[data-check], .fstep-act, input, select, textarea, form, [data-uncheck]")) return;
-    const card = e.target.closest("[data-clip]");
-    if (!card || !canSort()) return;
-    const id = card.dataset.clip;
-    const ids = st.checked.has(id) && st.checked.size ? [...st.checked] : [id];
-    drag.ready = { ids, x: e.clientX, y: e.clientY, pointerId: e.pointerId };
-  });
-  el.addEventListener("pointermove", (e) => {
-    if (!drag.ready && !drag.on) return;
-    if (drag.ready && !drag.on) {
-      const dx = e.clientX - drag.ready.x;
-      const dy = e.clientY - drag.ready.y;
-      if (dx * dx + dy * dy < 64) return;
-      drag.on = true;
-      dragging = true;
-      drag.ids = drag.ready.ids;
-      try { el.setPointerCapture(drag.ready.pointerId); } catch { /* ignore */ }
-      const mark = new Set(drag.ids);
-      el.querySelectorAll("[data-clip]").forEach((n) => { if (mark.has(n.dataset.clip)) n.classList.add("dragging"); });
-      drag.ghost = document.createElement("div");
-      drag.ghost.className = "cdrag-ghost";
-      drag.ghost.textContent = drag.ids.length > 1 ? `${drag.ids.length} clip` : "1 clip";
-      document.body.appendChild(drag.ghost);
-      document.body.classList.add("clip-dragging");
-      drag.ready = null;
-    }
-    if (!drag.on || !drag.ghost) return;
-    e.preventDefault();
+  const startDrag = (e) => {
+    if (!drag.ready || drag.on) return;
+    drag.on = true;
+    dragging = true;
+    drag.ids = drag.ready.ids;
+    const mark = new Set(drag.ids);
+    el.querySelectorAll("[data-clip]").forEach((n) => { if (mark.has(n.dataset.clip)) n.classList.add("dragging"); });
+    drag.ghost = document.createElement("div");
+    drag.ghost.className = "cdrag-ghost";
+    drag.ghost.textContent = drag.ids.length > 1 ? `${drag.ids.length} clip` : "1 clip";
+    document.body.appendChild(drag.ghost);
+    document.body.classList.add("clip-dragging");
+    drag.ready = null;
+    moveGhost(e);
+  };
+  const moveGhost = (e) => {
+    if (!drag.ghost) return;
     drag.ghost.style.left = `${e.clientX + 14}px`;
     drag.ghost.style.top = `${e.clientY + 14}px`;
     el.querySelectorAll(".drop-on").forEach((x) => x.classList.remove("drop-on"));
     const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-step]");
     if (hit) hit.classList.add("drop-on");
     drag.row = hit || null;
-  });
-  const endDrag = (e) => {
+  };
+  const onDown = (e) => {
+    if (e.button) return;
+    if (e.target.closest("[data-check], .fstep-act, input, select, textarea, form, [data-uncheck]")) return;
+    const card = e.target.closest("[data-clip]");
+    if (!card || !canSort()) return;
+    e.preventDefault();
+    try { card.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    drag.ready = { ids: batchIds(card.dataset.clip), x: e.clientX, y: e.clientY };
+  };
+  const onMove = (e) => {
+    if (!drag.ready && !drag.on) return;
+    if (drag.ready && !drag.on) {
+      const dx = e.clientX - drag.ready.x;
+      const dy = e.clientY - drag.ready.y;
+      if (dx * dx + dy * dy < 36) return;
+      startDrag(e);
+    }
+    if (!drag.on) return;
+    e.preventDefault();
+    moveGhost(e);
+  };
+  const onUp = () => {
     const row = drag.row;
     const ids = drag.ids;
     const was = drag.on;
     clearDrag();
     if (was) dropOn(row, ids);
   };
-  el.addEventListener("pointerup", endDrag);
-  el.addEventListener("pointercancel", () => clearDrag());
+  el.addEventListener("pointerdown", onDown);
+  window.addEventListener("pointermove", onMove, { passive: false });
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+  el.addEventListener("dragstart", (e) => e.preventDefault());
   el.addEventListener("submit", (e) => {
     if (e.target.id !== "f-step-form") return;
     e.preventDefault();
@@ -931,5 +948,13 @@ export async function render(view, ctx) {
     if (st.picked) { st.picked = null; el.querySelector("#fprev").innerHTML = ""; }
   };
   document.addEventListener("keydown", onKey);
-  ctx.setCleanup(() => { io?.disconnect(); clearInterval(timer); document.removeEventListener("keydown", onKey); clearDrag(); });
+  ctx.setCleanup(() => {
+    io?.disconnect();
+    clearInterval(timer);
+    document.removeEventListener("keydown", onKey);
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    clearDrag();
+  });
 }

@@ -110,9 +110,10 @@ table.t tr:hover td { background: var(--pane-2); }
 .lrow.empty { opacity: .72; }
 .lrow.drop-on, .stepchip.drop-on { outline: 2px solid var(--accent); background: var(--active-bg); }
 .fboard .cclip { cursor: grab; touch-action: none; }
+.fboard .cclip img { pointer-events: none; -webkit-user-drag: none; user-drag: none; }
 .cclip.dragging { opacity: .4; }
-body.clip-dragging { cursor: grabbing; user-select: none; }
-body.clip-dragging .cclip { cursor: grabbing; }
+body.clip-dragging, body.clip-dragging * { cursor: grabbing !important; user-select: none !important; }
+body.clip-dragging .fstrip { overflow: hidden; }
 .cclip .cchk { position: absolute; top: 6px; right: 6px; z-index: 2; width: 22px; height: 22px; border-radius: 6px;
   border: 1.5px solid rgba(255,255,255,.9); background: rgba(0,0,0,.35); box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 .cclip .cchk:hover { background: rgba(0,0,0,.55); }
