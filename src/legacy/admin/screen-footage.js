@@ -2,7 +2,7 @@
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
-  board: "index", shoot: "", hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
+  shoot: "", hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
 const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
 const batchIds = (id) => {
   if (!st.checked.size) return [id];
@@ -46,10 +46,11 @@ let summaryRef = { huyk: 0, outro: 0, illus: 0, skus: {} };
 let extraFolders = [];
 const SKU_KIND = { N: "nhan", L: "lac_tay", B: "bong_tai", K: "day_chuyen", D: "day_chuyen", O: "bong_tai" };
 const skuKind = (sku) => SKU_KIND[String(sku || "").trim().charAt(0).toUpperCase()] || "khac";
-const readyRows = () => (covRef.rows || []).filter((r) => r.ready);
+const readyRows = () => (covRef.rows || []).filter((r) => (r.clips || 0) > 0 || (r.sku && r.ready));
 const libOf = (c) => (c.library === "huyk" ? "huyk" : c.library === "outro" ? "outro" : c.library === "illus" ? "illus" : "product");
-const readySkus = () => new Set((covRef.rows || []).filter((r) => r.ready).map((r) => r.sku));
-const shownProduct = (c) => libOf(c) !== "product" || (c.product_set && readySkus().has(c.product_set));
+const readySkus = () => new Set(readyRows().map((r) => r.sku));
+const shownProduct = (c) => libOf(c) !== "product" || (c.product_set && readySkus().has(c.product_set))
+  || (c.product_set && !(covRef.rows || []).length);
 const isCraft = (c) => !!(c.craft_step && c.craft_step !== "hoan_thien" && c.craft_step !== "__unsorted");
 const originOf = (c) => c.craft_origin || "legacy";
 const catOf = (c) => c.category || (c.library === "broll" ? "product" : "khac");
@@ -116,7 +117,7 @@ function skuClips(lib, sku = st.sku) {
 }
 function skuRows(lib, cov) {
   const q = st.q.trim().toLowerCase();
-  return (cov.rows || []).filter((r) => r.ready).filter((r) => {
+  return readyRows().filter((r) => {
     if (st.cat && (r.category || skuKind(r.sku)) !== st.cat) return false;
     if (!q) return true;
     return `${r.sku} ${r.name || ""}`.toLowerCase().includes(q);
@@ -371,33 +372,34 @@ function boardClips(lib) {
   return list;
 }
 function stepBoards(clips) {
-  if (st.board === "tag") {
-    const order = ["__unsorted", ...NEW_STEPS];
-    return order.map((step, i) => {
-      const list = clips.filter((c) => (step === "__unsorted" ? unsorted(c) : c.craft_step === step));
-      if (!list.length) return null;
-      return { drop: step, idx: i + 1, label: step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step), tag: step === "__unsorted" ? "" : step, clips: list };
-    }).filter(Boolean);
-  }
-  const by = new Map();
-  clips.forEach((c) => {
-    const idx = c.step_index || 999;
-    const label = unsorted(c) && !c.step_label ? "Chưa xếp" : (c.step_label || STEP_VI[c.craft_step] || "Chưa xếp");
-    const key = `${idx}|${label}`;
-    if (!by.has(key)) by.set(key, { idx, label, tag: c.craft_step && NEW_SET.has(c.craft_step) ? c.craft_step : "", clips: [] });
-    by.get(key).clips.push(c);
+  const labelOf = (step) => (step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step));
+  const tagOf = (label) => {
+    const hit = Object.entries(STEP_VI).find(([, v]) => v === label);
+    return hit ? hit[0] : "";
+  };
+  const order = ["__unsorted", ...NEW_STEPS];
+  const rows = [];
+  order.forEach((step, i) => {
+    const list = clips.filter((c) => (step === "__unsorted" ? unsorted(c) : c.craft_step === step));
+    const label = labelOf(step);
+    const kept = extraFolders.some((f) => String(f.label || "").trim() === label);
+    if (!list.length && !kept && step !== "__unsorted") return;
+    if (!list.length && step === "__unsorted") return;
+    rows.push({
+      drop: step, idx: i + 1, rawIdx: i + 1, label,
+      tag: step === "__unsorted" ? "" : step, clips: list,
+    });
   });
   extraFolders.forEach((f) => {
-    const idx = Number(f.idx) || 999;
     const label = String(f.label || "").trim();
     if (!label || label === "Chưa xếp") return;
-    if ([...by.values()].some((r) => r.label === label)) return;
-    const key = `${idx}|${label}`;
-    if (!by.has(key)) by.set(key, { idx, label, tag: "", clips: [] });
+    if (rows.some((r) => r.label === label)) return;
+    const tag = tagOf(label);
+    const drop = tag && NEW_SET.has(tag) ? tag : "__folder";
+    const idx = Number(f.idx) || rows.length + 1;
+    rows.push({ drop, idx, rawIdx: idx, label, tag, clips: [] });
   });
-  return [...by.values()].sort((a, b) => a.idx - b.idx || a.label.localeCompare(b.label, "vi")).map((row, i) => ({
-    ...row, drop: row.tag || "__folder", rawIdx: row.idx, idx: row.idx === 999 ? i + 1 : row.idx,
-  }));
+  return rows;
 }
 function craftBoard(lib) {
   const all = skuClips(lib).filter((c) => !st.hideStill || !isStill(c));
@@ -411,8 +413,6 @@ function craftBoard(lib) {
   const rows = stepBoards(boardClips(lib));
   const cm = st.composer || {};
   const tools = `<div class="ftools">
-      <button type="button" class="pill" data-board="index" aria-pressed="${st.board === "index"}">Theo số thứ mục</button>
-      <button type="button" class="pill" data-board="tag" aria-pressed="${st.board === "tag"}">Gom theo tag công đoạn</button>
       <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
       <div class="sp"></div>
       <button type="button" class="btn pri" data-step-add="1">Thêm công đoạn</button>
@@ -576,15 +576,18 @@ export async function render(view, ctx) {
       .map((r) => ({ idx: r.rawIdx, label: r.label }));
     try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
   };
-  const folderClips = (idx, label) => boardClips(lib).filter((c) => Number(c.step_index || 999) === Number(idx)
-    && String(c.step_label || STEP_VI[c.craft_step] || "Chưa xếp") === String(label));
+  const folderClips = (idx, label) => {
+    const row = stepBoards(boardClips(lib)).find((r) => r.label === label
+      || (Number.isFinite(idx) && Number(r.rawIdx) === Number(idx) && r.label === label));
+    return row ? row.clips : [];
+  };
   const existingStep = (el) => {
     if (!el?.classList?.contains("fstep")) return null;
     const step = el.dataset.dropStep;
     const idx = Number(el.dataset.dropIdx);
     const label = el.dataset.dropLabel || "";
     if (!label) return null;
-    const ok = stepBoards(boardClips(lib)).some((r) => r.label === label && Number(r.rawIdx) === idx);
+    const ok = stepBoards(boardClips(lib)).some((r) => r.label === label);
     return ok ? { el, step, idx, label } : null;
   };
   const boardIds = () => stepBoards(boardClips(lib)).flatMap((r) => r.clips.map((c) => c.id));
@@ -891,7 +894,6 @@ export async function render(view, ctx) {
       clearTicks(); await fillView(); paint(); return;
     }
     if (t.dataset.origin !== undefined) { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; clearTicks(); await fillView(); paint(); return; }
-    if (t.dataset.board) { st.board = t.dataset.board; paint(); return; }
     if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
     if (t.hasAttribute("data-step-add")) {
