@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import AgentChat from "./components/AgentChat";
 import Rail from "./components/Rail";
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import AdminHost from "./pages/AdminHost";
@@ -35,6 +36,7 @@ function Shell() {
         auth.clear();
       }} />
       {seenStudio ? <StudioPage hidden={!studio} /> : null}
+      {seenStudio ? <AgentChat hidden={!studio} /> : null}
       {seenAdmin ? (
         <div hidden={studio} style={studio ? undefined : { display: "contents" }}>
           <AdminHost />

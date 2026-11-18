@@ -34,6 +34,28 @@ textarea { resize: vertical; line-height: 1.55; }
 .export-menu a:hover, .export-menu .item:hover { background: var(--chip-bg); } .export-menu small { display: block; color: var(--muted); }
 .export-menu .item.disabled { opacity: .5; }
 
+.agent-dock { position: fixed; right: 18px; bottom: 18px; z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.agent-fab { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--pane); color: var(--ink);
+  display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow, 0 8px 24px rgba(0,0,0,.12)); }
+.agent-fab:hover, .agent-fab.on { border-color: var(--accent); color: var(--accent); }
+.agent-panel { width: min(340px, calc(100vw - 72px)); height: min(420px, calc(100dvh - 120px)); background: var(--pane);
+  border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow, 0 12px 40px rgba(0,0,0,.18));
+  display: flex; flex-direction: column; overflow: hidden; }
+.agent-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-weight: 650; font-size: 13px;
+  border-bottom: 1px solid var(--line); }
+.agent-x { border: 0; background: none; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 4px; }
+.agent-msgs { flex: 1; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.agent-bubble { margin: 0; padding: 8px 10px; border-radius: 10px; max-width: 92%; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.agent-bubble.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
+.agent-bubble.assistant { align-self: flex-start; background: var(--chip-bg); }
+.agent-bubble.dim { opacity: .7; }
+.agent-form { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); }
+.agent-form input { flex: 1; min-width: 0; }
+.agent-form button { height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink);
+  font-weight: 600; cursor: pointer; }
+.agent-form button:disabled { opacity: .45; cursor: default; }
+@media (max-width: 700px) { .agent-dock { right: 12px; bottom: 64px; } }
+
 .editor { display: grid; grid-template-columns: 520px minmax(320px, 1fr) 300px; grid-template-rows: minmax(0, 1fr) 330px; gap: 0; flex: 1; min-height: 0; }
 .pane { background: var(--pane); border: 0; border-radius: 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .library { border-right: 1px solid var(--line); } .inspector { border-left: 1px solid var(--line); }

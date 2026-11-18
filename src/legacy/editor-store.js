@@ -8,7 +8,10 @@ const listeners = [];
 let poller = null;
 
 export const subscribe = (fn) => listeners.push(fn);
-export const emit = () => listeners.forEach((fn) => fn(store));
+export const emit = () => {
+  try { window.__vcbJobId = store.job?.id || ""; } catch { /* ignore */ }
+  listeners.forEach((fn) => fn(store));
+};
 
 export function setUi(patch) {
   Object.assign(store, patch);

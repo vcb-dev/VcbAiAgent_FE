@@ -75,4 +75,5 @@ export const api = {
     }
   },
   studioVoice: (body) => call("/api/studio/voice", { method: "POST", body: JSON.stringify(body) }),
+  learnChat: (body) => call("/api/learn/chat", { method: "POST", body: JSON.stringify(body) }),
 };
