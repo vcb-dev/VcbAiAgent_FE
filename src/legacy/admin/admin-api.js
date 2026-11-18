@@ -28,6 +28,7 @@ export const api = {
   restart: () => call("/api/system/restart", { method: "POST" }),
   review: (id, body) => call(`/api/jobs/${encodeURIComponent(id)}/review`, { method: "POST", body: JSON.stringify(body) }),
   coverage: () => call("/api/coverage"),
+  librarySkus: () => call("/api/library/skus"),
   footageUsage: () => call("/api/footage/usage"),
   tagQueue: () => call("/api/review/tags"),
   sourceStatus: () => call("/api/source/status"),

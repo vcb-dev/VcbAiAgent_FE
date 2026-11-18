@@ -807,23 +807,47 @@ export async function render(view, ctx) {
       { root: null, rootMargin: "600px 0px" });
     io.observe(pg);
   };
+  const SKU_LS = "vcb-footage-skus";
+  const applySkuSnap = (snap) => {
+    if (!snap?.rows?.length) return false;
+    cov = { ...(cov || {}), rows: snap.rows, columns: cov.columns || [] };
+    covRef = cov;
+    summary = {
+      ...(summary || {}),
+      skus: Object.fromEntries(snap.rows.map((r) => [r.sku, r.clips || 0])),
+      huyk: Number(snap.huyk || 0),
+      outro: Number(snap.outro || 0),
+      illus: Number(snap.illus || 0),
+    };
+    summaryRef = summary;
+    try {
+      const raw = JSON.stringify(snap);
+      if (localStorage.getItem(SKU_LS) !== raw) localStorage.setItem(SKU_LS, raw);
+    } catch { /* quota */ }
+    return true;
+  };
+  try { applySkuSnap(JSON.parse(localStorage.getItem(SKU_LS) || "null")); } catch { /* ignore */ }
+  st._loading = !readyRows().length;
   paint();
   (async () => {
     const gen = ++navGen;
-    st._loading = true;
-    paint();
+    if (!readyRows().length) { st._loading = true; paint(); }
     const keep = (p, fallback) => p.catch(() => fallback);
     const bump = () => { if (gen === navGen) paint(); };
     const hasRows = () => !!(readyRows().length || Object.keys(summaryRef.skus || {}).length);
     keep(api.sourceStatus(), src).then((v) => { src = v; bump(); });
     keep(api.footageUsage(), usage).then((v) => { usage = v; bump(); });
+    keep(api.librarySkus(), null).then((snap) => {
+      if (applySkuSnap(snap)) st._loading = false;
+      bump();
+    });
     const sumP = keep(api.librarySummary(), summary).then((v) => {
       summary = v; summaryRef = v || summaryRef;
       if (hasRows()) st._loading = false;
       bump();
     });
     const covP = keep(api.coverage(), cov).then((v) => {
-      cov = v; covRef = v || covRef;
+      if (v?.rows?.length) { cov = v; covRef = v; }
       if (hasRows()) st._loading = false;
       bump();
     });
