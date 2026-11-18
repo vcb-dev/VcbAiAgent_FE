@@ -109,7 +109,7 @@ table.t tr:hover td { background: var(--pane-2); }
 .lrow:hover { background: var(--pane-2); } .lrow.on { background: var(--active-bg); }
 .lrow.empty { opacity: .72; }
 .lrow.drop-on, .stepchip.drop-on { outline: 2px solid var(--accent); background: var(--active-bg); }
-.fboard .cclip { cursor: grab; touch-action: none; }
+.fboard .cclip { cursor: grab; touch-action: pan-y; }
 .fboard .cclip img { pointer-events: none; -webkit-user-drag: none; user-drag: none; }
 .cclip.dragging { opacity: .4; }
 body.clip-dragging, body.clip-dragging * { cursor: grabbing !important; user-select: none !important; }
@@ -920,7 +920,7 @@ summary.rs-h { cursor: pointer; }
 .fstep-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .fstep-t b { font-size: 14px; }
 .fstep-tag { align-self: flex-start; font: 600 11px var(--mono); padding: 1px 6px; border-radius: 5px; background: var(--chip-bg); color: var(--muted); }
-.fstrip { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior: contain; padding-bottom: 2px; }
+.fstrip { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; overscroll-behavior-y: auto; touch-action: pan-x pan-y; padding-bottom: 2px; }
 .fstrip .cclip { flex: none; width: 108px; }
 .fstrip .cclip .meta { padding: 6px 8px; font-size: 11px; }
 @media (max-width: 800px) { .fstep { grid-template-columns: 1fr; } }

@@ -396,7 +396,7 @@ function stepBoards(clips) {
     if (!by.has(key)) by.set(key, { idx, label, tag: "", clips: [] });
   });
   return [...by.values()].sort((a, b) => a.idx - b.idx || a.label.localeCompare(b.label, "vi")).map((row, i) => ({
-    ...row, drop: row.tag || "__folder", idx: row.idx === 999 ? i + 1 : row.idx,
+    ...row, drop: row.tag || "__folder", rawIdx: row.idx, idx: row.idx === 999 ? i + 1 : row.idx,
   }));
 }
 function craftBoard(lib) {
@@ -430,13 +430,13 @@ function craftBoard(lib) {
       ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
       <span class="muted small">Mỗi video chỉ lấy source của một lần quay, không trộn.</span>
     </div>
-    <p class="muted small" style="margin:0">Tick các clip, rồi <b>giữ và kéo xuống</b> hàng công đoạn khác — cả cụm đã tick đi theo.</p>
+    <p class="muted small" style="margin:0">Tick các clip, rồi giữ kéo vào <b>một hàng công đoạn đã có</b>. Kéo ra ngoài không tạo mục mới.</p>
     <div class="fpick" id="f-picked" ${st.checked.size ? "" : "hidden"}>Đã chọn <b id="f-picked-n">${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
       <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
   const body = rows.map((row) => {
-    const editing = cm.kind === "edit" && Number(cm.idx) === Number(row.idx) && cm.label === row.label;
-    const deleting = cm.kind === "del" && Number(cm.idx) === Number(row.idx) && cm.label === row.label;
+    const editing = cm.kind === "edit" && Number(cm.idx) === Number(row.rawIdx) && cm.label === row.label;
+    const deleting = cm.kind === "del" && Number(cm.idx) === Number(row.rawIdx) && cm.label === row.label;
     const locked = row.label === "Chưa xếp";
     const title = editing
       ? `<form id="f-step-form" class="fedit" data-step-kind="edit">
@@ -449,15 +449,15 @@ function craftBoard(lib) {
           ${cm.err && deleting ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
         </span>`;
     const act = deleting
-      ? `<button type="button" class="btn sm pri" data-step-del-ok="${esc(row.label)}" data-step-idx="${row.idx}">Xóa mục</button>
+      ? `<button type="button" class="btn sm pri" data-step-del-ok="${esc(row.label)}" data-step-idx="${row.rawIdx}">Xóa mục</button>
          <button type="button" class="btn sm" data-step-cancel="1">Hủy</button>`
       : editing
         ? `<button type="submit" form="f-step-form" class="btn sm pri">Lưu</button>
            <button type="button" class="btn sm" data-step-cancel="1">Hủy</button>`
-        : `<button type="button" class="btn sm" data-check-row="${esc(row.label)}" data-step-idx="${row.idx}">${row.clips.length && row.clips.every((c) => st.checked.has(c.id)) ? "Bỏ chọn" : "Chọn hết"}</button>
-           <button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.idx}">Sửa</button>
-           ${locked ? "" : `<button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.idx}">Xóa</button>`}`;
-    return `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.idx}" data-drop-label="${esc(row.label)}">
+        : `<button type="button" class="btn sm" data-check-row="${esc(row.label)}" data-step-idx="${row.rawIdx}">${row.clips.length && row.clips.every((c) => st.checked.has(c.id)) ? "Bỏ chọn" : "Chọn hết"}</button>
+           <button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.rawIdx}">Sửa</button>
+           ${locked ? "" : `<button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.rawIdx}">Xóa</button>`}`;
+    return `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.rawIdx}" data-drop-label="${esc(row.label)}">
       <div class="fstep-h">
         <span class="fstep-n">${row.idx}</span>
         ${title}
@@ -573,11 +573,20 @@ export async function render(view, ctx) {
   const persistFolders = async () => {
     extraFolders = stepBoards(boardClips(lib))
       .filter((r) => !r.clips.length && r.label !== "Chưa xếp")
-      .map((r) => ({ idx: r.idx, label: r.label }));
+      .map((r) => ({ idx: r.rawIdx, label: r.label }));
     try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
   };
   const folderClips = (idx, label) => boardClips(lib).filter((c) => Number(c.step_index || 999) === Number(idx)
     && String(c.step_label || STEP_VI[c.craft_step] || "Chưa xếp") === String(label));
+  const existingStep = (el) => {
+    if (!el?.classList?.contains("fstep")) return null;
+    const step = el.dataset.dropStep;
+    const idx = Number(el.dataset.dropIdx);
+    const label = el.dataset.dropLabel || "";
+    if (!label) return null;
+    const ok = stepBoards(boardClips(lib)).some((r) => r.label === label && Number(r.rawIdx) === idx);
+    return ok ? { el, step, idx, label } : null;
+  };
   const boardIds = () => stepBoards(boardClips(lib)).flatMap((r) => r.clips.map((c) => c.id));
   const toggleTick = (id, ev) => {
     if (ev?.shiftKey && st.lastTick) {
@@ -629,7 +638,7 @@ export async function render(view, ctx) {
   };
   const nameTaken = (name, skipIdx, skipLabel) => stepBoards(boardClips(lib)).some((r) =>
     r.label.trim().toLowerCase() === name.toLowerCase()
-    && !(Number(r.idx) === Number(skipIdx) && r.label === skipLabel));
+    && !(Number(r.rawIdx) === Number(skipIdx) && r.label === skipLabel));
   const commitComposer = async () => {
     const cm = st.composer;
     if (!cm || (cm.kind !== "add" && cm.kind !== "edit")) return;
@@ -721,10 +730,13 @@ export async function render(view, ctx) {
     setTimeout(() => { dragging = false; }, 0);
   };
   const dropOn = async (row, ids) => {
-    if (!row || !ids.length || !canSort()) return;
-    const step = row.dataset.dropStep;
-    const idx = Number(row.dataset.dropIdx || 0);
-    const label = row.dataset.dropLabel || (step === "__unsorted" ? "Chưa xếp" : (STEP_VI[step] || step));
+    if (!ids.length || !canSort()) return;
+    const dest = existingStep(row);
+    if (!dest) {
+      toast("Thả vào một công đoạn đã có — không tạo mục mới", true);
+      return;
+    }
+    const { step, idx, label } = dest;
     const bad = ids.some((id) => {
       const clip = lib.find((c) => c.id === id);
       return !clip || clip.product_set !== st.sku || originOf(clip) !== st.origin;
@@ -746,6 +758,7 @@ export async function render(view, ctx) {
     drag.on = true;
     dragging = true;
     drag.ids = drag.ready.ids;
+    const pid = drag.ready.pointerId;
     const mark = new Set(drag.ids);
     el.querySelectorAll("[data-clip]").forEach((n) => { if (mark.has(n.dataset.clip)) n.classList.add("dragging"); });
     drag.ghost = document.createElement("div");
@@ -754,6 +767,9 @@ export async function render(view, ctx) {
     document.body.appendChild(drag.ghost);
     document.body.classList.add("clip-dragging");
     drag.ready = null;
+    if (pid != null) {
+      try { e.target?.setPointerCapture?.(pid); } catch { /* ignore */ }
+    }
     moveGhost(e);
   };
   const moveGhost = (e) => {
@@ -761,18 +777,17 @@ export async function render(view, ctx) {
     drag.ghost.style.left = `${e.clientX + 14}px`;
     drag.ghost.style.top = `${e.clientY + 14}px`;
     el.querySelectorAll(".drop-on").forEach((x) => x.classList.remove("drop-on"));
-    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-step]");
-    if (hit) hit.classList.add("drop-on");
-    drag.row = hit || null;
+    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("section.fstep[data-drop-step]");
+    const dest = existingStep(hit);
+    if (dest) dest.el.classList.add("drop-on");
+    drag.row = dest?.el || null;
   };
   const onDown = (e) => {
     if (e.button) return;
     if (e.target.closest("[data-check], .fstep-act, input, select, textarea, form, [data-uncheck]")) return;
     const card = e.target.closest("[data-clip]");
     if (!card || !canSort()) return;
-    e.preventDefault();
-    try { card.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-    drag.ready = { ids: batchIds(card.dataset.clip), x: e.clientX, y: e.clientY };
+    drag.ready = { ids: batchIds(card.dataset.clip), x: e.clientX, y: e.clientY, pointerId: e.pointerId, type: e.pointerType };
   };
   const onMove = (e) => {
     if (!drag.ready && !drag.on) return;
@@ -780,11 +795,37 @@ export async function render(view, ctx) {
       const dx = e.clientX - drag.ready.x;
       const dy = e.clientY - drag.ready.y;
       if (dx * dx + dy * dy < 36) return;
+      if (drag.ready.type === "touch" && Math.abs(dy) >= Math.abs(dx)) {
+        drag.ready = null;
+        return;
+      }
       startDrag(e);
     }
     if (!drag.on) return;
     e.preventDefault();
     moveGhost(e);
+  };
+  const paneScroll = () => el.closest(".split > .list") || el.closest(".list");
+  const onWheel = (e) => {
+    const strip = e.target.closest(".fstrip");
+    if (!strip) return;
+    const dx = e.deltaX;
+    const dy = e.deltaY;
+    const line = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? strip.clientHeight : 1;
+    if (e.shiftKey && !dx) {
+      strip.scrollLeft += dy * line;
+      e.preventDefault();
+      return;
+    }
+    if (Math.abs(dy) >= Math.abs(dx)) {
+      const pane = paneScroll();
+      if (!pane) return;
+      pane.scrollTop += dy * line;
+      e.preventDefault();
+      return;
+    }
+    strip.scrollLeft += dx * line;
+    e.preventDefault();
   };
   const onUp = () => {
     const row = drag.row;
@@ -794,6 +835,7 @@ export async function render(view, ctx) {
     if (was) dropOn(row, ids);
   };
   el.addEventListener("pointerdown", onDown);
+  el.addEventListener("wheel", onWheel, { passive: false });
   window.addEventListener("pointermove", onMove, { passive: false });
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onUp);
@@ -955,6 +997,7 @@ export async function render(view, ctx) {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
+    el.removeEventListener("wheel", onWheel);
     clearDrag();
   });
 }
