@@ -30,7 +30,7 @@ export function scriptForm(boot) {
       <textarea id="script-input" rows="7" placeholder="Chọn kịch bản trong kho hoặc dán kịch bản…" aria-label="Lời kịch bản"></textarea></div>
     <div class="step-card">${stepHead(2, "Sản phẩm")}
       <select id="product-select" aria-label="Bộ footage sản phẩm"><option value="">— Không gắn sản phẩm —</option>
-        ${boot.products.map((p) => `<option value="${p.sku}">${esc(p.sku)} · ${esc(p.name.replace(/-/g, " "))} (${p.clips} clip · ${(p.step_labels || p.steps || []).length} CĐ)</option>`).join("")}</select>
+        ${boot.products.map((p) => `<option value="${p.sku}">${esc(p.sku)} · ${esc((p.name || "").replace(/-/g, " "))} (${p.clips || 0} clip · ${(p.step_labels || p.steps || []).length} CĐ)</option>`).join("")}</select>
       <div id="product-steps" class="hint">Chỉ hiện mã đủ ≥3 công đoạn chế tác.</div>
       <label class="field">Tuyến nội dung <select id="line-select" aria-label="Tuyến nội dung"><option value="A4">A4</option></select></label>
       <div id="a4-route"></div>
@@ -458,14 +458,72 @@ async function onA4Click(e) {
   }
 }
 
+function metaFromClips(clips) {
+  const by = new Map();
+  let finalClips = 0;
+  let heroClips = 0;
+  for (const c of clips || []) {
+    const step = c.craft_step;
+    if (step) {
+      const row = by.get(step) || { step, label: c.step_label || step, clips: 0 };
+      row.clips += 1;
+      if (c.step_label) row.label = c.step_label;
+      by.set(step, row);
+    }
+    if (c.craft_step === "hoan_thien" || (c.roles?.product_final || 0) >= 0.5) finalClips += 1;
+    if ((c.roles?.product_hero || 0) >= 0.5) heroClips += 1;
+  }
+  const step_detail = [...by.values()];
+  return {
+    step_detail,
+    step_labels: step_detail.map((x) => x.label),
+    steps: step_detail.map((x) => x.step),
+    has_final: finalClips > 0,
+    final_clips: finalClips,
+    hero_clips: heroClips,
+  };
+}
+
+function paintProductHint() {
+  const p = productOf();
+  const labels = Array.isArray(p?.step_labels) ? p.step_labels.filter(Boolean) : [];
+  const el = $("product-steps");
+  if (!el) return;
+  if (!p) {
+    el.textContent = "Chỉ hiện mã đủ ≥3 công đoạn chế tác.";
+    return;
+  }
+  el.textContent = labels.length
+    ? `Công đoạn có footage: ${labels.join(" → ")}${p.has_final ? ` · hoàn thiện ${p.final_clips || 0} clip` : " · chưa có cảnh hoàn thiện"}`
+    : `${p.sku} · ${p.clips || 0} clip`;
+}
+
+let _metaSeq = 0;
+async function fillProductMeta(sku) {
+  if (!sku) return;
+  const seq = ++_metaSeq;
+  try {
+    const { clips } = await api.library({ sku, limit: 400 });
+    if (seq !== _metaSeq) return;
+    const keep = (store.boot.library || []).filter((c) => c.product_set !== sku);
+    store.boot.library = [...(clips || []), ...keep];
+    store.boot._libSku = sku;
+    const p = productOf();
+    if (p) Object.assign(p, metaFromClips(clips || []));
+    paintProductHint();
+    paintA4();
+  } catch {
+    paintProductHint();
+  }
+}
+
 function showSteps() {
   const p = productOf();
-  $("product-steps").textContent = p
-    ? `Công đoạn có footage: ${p.step_labels.join(" → ")}${p.has_final ? ` · hoàn thiện ${p.final_clips || 0} clip` : " · chưa có cảnh hoàn thiện"}`
-    : "Chỉ hiện mã đủ ≥3 công đoạn chế tác.";
   if (st.a4 && p && st.a4.sku !== p.sku) st.a4 = null;
   if (!p) st.a4 = null;
+  paintProductHint();
   paintA4();
+  if (p) fillProductMeta(p.sku);
 }
 
 async function makeVoice(btn) {

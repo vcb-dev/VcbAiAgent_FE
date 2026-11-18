@@ -106,7 +106,9 @@ export async function startStudio() {
   api.bootstrap(true).then(applyBoot).catch(() => {});
   api.librarySkus().then((snap) => {
     if (!snap?.rows?.length) return;
-    applyBoot({ products: snap.rows.map((r) => ({ sku: r.sku, name: r.name || r.sku, clips: r.clips || 0, steps: [], ready: true })) });
+    applyBoot({ products: snap.rows.map((r) => ({
+      sku: r.sku, name: r.name || r.sku, clips: r.clips || 0, steps: [], step_labels: [], ready: true,
+    })) });
   }).catch(() => {});
   await applyDeepLink();
   window.addEventListener("resize", () => emit());
