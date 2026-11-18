@@ -813,16 +813,29 @@ export async function render(view, ctx) {
     st._loading = true;
     paint();
     const keep = (p, fallback) => p.catch(() => fallback);
-    [src, cov, usage, summary] = await Promise.all([
-      keep(api.sourceStatus(), src),
-      keep(api.coverage(), cov),
-      keep(api.footageUsage(), usage),
-      keep(api.librarySummary(), summary),
-    ]);
-    summaryRef = summary || summaryRef;
+    const bump = () => { if (gen === navGen) paint(); };
+    const hasRows = () => !!(readyRows().length || Object.keys(summaryRef.skus || {}).length);
+    keep(api.sourceStatus(), src).then((v) => { src = v; bump(); });
+    keep(api.footageUsage(), usage).then((v) => { usage = v; bump(); });
+    const sumP = keep(api.librarySummary(), summary).then((v) => {
+      summary = v; summaryRef = v || summaryRef;
+      if (hasRows()) st._loading = false;
+      bump();
+    });
+    const covP = keep(api.coverage(), cov).then((v) => {
+      cov = v; covRef = v || covRef;
+      if (hasRows()) st._loading = false;
+      bump();
+    });
+    await Promise.race([sumP, covP]);
+    if (gen !== navGen) return;
+    if (hasRows()) st._loading = false;
+    bump();
+    await Promise.all([sumP, covP]);
     if (gen !== navGen) return;
     await fillView();
-    if (gen === navGen) paint();
+    st._loading = false;
+    bump();
   })();
   let dragging = false;
   const drag = { ready: null, on: false, ids: [], ghost: null, row: null };
