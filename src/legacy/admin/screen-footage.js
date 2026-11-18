@@ -387,10 +387,9 @@ function stepBoards(clips) {
     if (rows.some((r) => r.label === label)) return;
     const tag = tagOf(label);
     const drop = tag && NEW_SET.has(tag) ? tag : "__folder";
-    const idx = Number(f.idx) || rows.length + 1;
-    rows.push({ drop, idx, rawIdx: idx, label, tag, clips: [] });
+    rows.push({ drop, idx: rows.length + 1, rawIdx: rows.length + 1, label, tag, clips: [] });
   });
-  return rows;
+  return rows.map((row, i) => ({ ...row, idx: i + 1, rawIdx: i + 1 }));
 }
 function craftBoard(lib) {
   const rows = stepBoards(boardClips(lib));
