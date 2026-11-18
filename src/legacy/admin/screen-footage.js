@@ -837,12 +837,19 @@ export async function render(view, ctx) {
     const hasRows = () => !!(readyRows().length || Object.keys(summaryRef.skus || {}).length);
     keep(api.sourceStatus(), src).then((v) => { src = v; bump(); });
     keep(api.footageUsage(), usage).then((v) => { usage = v; bump(); });
-    keep(api.librarySkus(), null).then((snap) => {
-      if (applySkuSnap(snap)) st._loading = false;
-      bump();
-    });
+    const pullSkus = async () => {
+      for (let i = 0; i < 20; i++) {
+        const snap = await keep(api.librarySkus(), null);
+        if (applySkuSnap(snap)) { st._loading = false; bump(); return true; }
+        if (hasRows()) { st._loading = false; bump(); return true; }
+        if (!snap?.pending) break;
+        await new Promise((r) => setTimeout(r, 1500));
+        if (gen !== navGen) return false;
+      }
+      return hasRows();
+    };
     const sumP = keep(api.librarySummary(), summary).then((v) => {
-      summary = v; summaryRef = v || summaryRef;
+      if (v?.skus && Object.keys(v.skus).length) { summary = v; summaryRef = v; }
       if (hasRows()) st._loading = false;
       bump();
     });
@@ -851,15 +858,16 @@ export async function render(view, ctx) {
       if (hasRows()) st._loading = false;
       bump();
     });
-    await Promise.race([sumP, covP]);
+    await Promise.race([sumP, covP, pullSkus(), new Promise((r) => setTimeout(r, 2500))]);
     if (gen !== navGen) return;
     if (hasRows()) st._loading = false;
     bump();
-    await Promise.all([sumP, covP]);
-    if (gen !== navGen) return;
-    await fillView();
-    st._loading = false;
-    bump();
+    Promise.all([sumP, covP]).then(async () => {
+      if (gen !== navGen) return;
+      await fillView();
+      st._loading = false;
+      bump();
+    });
   })();
   let dragging = false;
   const drag = { ready: null, on: false, ids: [], ghost: null, row: null };
