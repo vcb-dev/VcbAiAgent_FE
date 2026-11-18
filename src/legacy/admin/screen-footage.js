@@ -676,11 +676,20 @@ export async function render(view, ctx) {
     const gs = groups(lib, cov);
     const board = st.lib === "product" && st.sku && isCraftOrigin();
     const sideTop = el.querySelector(".side-l")?.scrollTop || 0;
+    const mainTop = el.querySelector("#fmain")?.scrollTop || 0;
+    const winTop = window.scrollY;
     el.innerHTML = `${header(lib, src)}<div class="split${board ? " board" : ""}">
       <aside class="side-l" aria-label="Nhóm">${board ? "" : sideList(lib, gs)}</aside>
       <section class="list" id="fmain">${mainHead(lib, gs)}<div id="fgrid">${grid(lib)}</div></section></div><div id="fprev">${preview(lib)}</div>`;
-    const side = el.querySelector(".side-l");
-    if (side) side.scrollTop = sideTop;
+    const restoreScroll = () => {
+      const side = el.querySelector(".side-l");
+      if (side) side.scrollTop = sideTop;
+      const main = el.querySelector("#fmain");
+      if (main) main.scrollTop = mainTop;
+      if (winTop) window.scrollTo(0, winTop);
+    };
+    restoreScroll();
+    requestAnimationFrame(restoreScroll);
     watchMore();
     const inp = el.querySelector("#f-step-name");
     if (inp && (st.composer?.kind === "add" || st.composer?.kind === "edit")) {
