@@ -899,7 +899,7 @@ summary.rs-h { cursor: pointer; }
 /* Kho footage · công đoạn: một hàng mỗi bước, clip xếp ngang. Màu lấy từ theme, không nền đen. */
 .fscreen .split.board > .side-l { display: none; }
 .fboard { display: flex; flex-direction: column; gap: 12px; }
-.ftools, .fshoots { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ftools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ftools .sp { flex: 1; }
 .fadd, .fedit { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .fadd { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }

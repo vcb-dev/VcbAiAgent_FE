@@ -2,7 +2,7 @@
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
-  shoot: "", hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
+  hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "" };
 const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
 const batchIds = (id) => {
   if (!st.checked.size) return [id];
@@ -60,14 +60,6 @@ const ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke
 const dur = (c) => (c.usable ? (c.usable[1] - c.usable[0] + 0.05).toFixed(1) + "s" : "");
 const unsorted = (c) => !NEW_SET.has(c.craft_step);
 const isStill = (c) => c.upload_kind === "image" || c.tech?.codec === "image" || c.tags?.motion_level === 1;
-function shootOf(c) {
-  const folder = String(c.source_rel || "").split("/").find((p) => /^\d{6}[_-]/.test(p)) || "";
-  if (!folder) return { key: "", label: "" };
-  const date = folder.slice(0, 6);
-  const staff = (folder.match(/_([A-Za-z]{2,4}\d{2})$/) || [])[1] || "";
-  return { key: folder, label: staff ? `${date} · ${staff.toUpperCase()}` : date };
-}
-
 function matchOrigin(c) {
   if (!st.origin) return true;
   if (st.origin === "final") return isFinished(c);
@@ -366,7 +358,6 @@ function originCard(g) {
 function boardClips(lib) {
   let list = skuClips(lib);
   if (st.hideStill) list = list.filter((c) => !isStill(c));
-  if (st.shoot) list = list.filter((c) => shootOf(c).key === st.shoot);
   const q = st.q.trim().toLowerCase();
   if (q) list = list.filter((c) => `${c.name} ${c.step_label || ""} ${c.product_set || ""} ${STEP_VI[c.craft_step] || ""}`.toLowerCase().includes(q));
   return list;
@@ -402,14 +393,6 @@ function stepBoards(clips) {
   return rows;
 }
 function craftBoard(lib) {
-  const all = skuClips(lib).filter((c) => !st.hideStill || !isStill(c));
-  const shoots = new Map();
-  all.forEach((c) => {
-    const s = shootOf(c);
-    if (!s.key) return;
-    shoots.set(s.key, { ...s, n: (shoots.get(s.key)?.n || 0) + 1 });
-  });
-  const chips = [...shoots.values()].sort((a, b) => b.n - a.n);
   const rows = stepBoards(boardClips(lib));
   const cm = st.composer || {};
   const tools = `<div class="ftools">
@@ -425,15 +408,10 @@ function craftBoard(lib) {
       ${cm.err ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
     </form>` : ""}
     ${st.boardErr ? `<p class="ferr">${esc(st.boardErr)}</p>` : ""}
-    <div class="fshoots"><span class="muted small">Lần quay</span>
-      <button type="button" class="pill" data-shoot="" aria-pressed="${!st.shoot}">Tất cả</button>
-      ${chips.map((s) => `<button type="button" class="pill" data-shoot="${esc(s.key)}" aria-pressed="${st.shoot === s.key}">${esc(s.label)} <span class="mono muted">${s.n} clip</span></button>`).join("")}
-      <span class="muted small">Mỗi video chỉ lấy source của một lần quay, không trộn.</span>
-    </div>
     <p class="muted small" style="margin:0">Tick các clip, rồi giữ kéo vào <b>một hàng công đoạn đã có</b>. Kéo ra ngoài không tạo mục mới.</p>
     <div class="fpick" id="f-picked" ${st.checked.size ? "" : "hidden"}>Đã chọn <b id="f-picked-n">${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
       <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>`;
-  if (!rows.length) return `${tools}<div class="empty">Không có clip ở lần quay này.</div>`;
+  if (!rows.length) return `${tools}<div class="empty">Không có clip nguồn này.</div>`;
   const body = rows.map((row) => {
     const editing = cm.kind === "edit" && Number(cm.idx) === Number(row.rawIdx) && cm.label === row.label;
     const deleting = cm.kind === "del" && Number(cm.idx) === Number(row.rawIdx) && cm.label === row.label;
@@ -930,7 +908,7 @@ export async function render(view, ctx) {
     if (t.dataset.cat !== undefined) { go(() => { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; }); return; }
     if (t.hasAttribute("data-back-origin")) {
       go(() => {
-        st.origin = ""; st.step = ""; st.shoot = ""; st.shown = 60; st.composer = null; st.boardErr = "";
+        st.origin = ""; st.step = ""; st.shown = 60; st.composer = null; st.boardErr = "";
         clearTicks();
       });
       return;
@@ -939,7 +917,6 @@ export async function render(view, ctx) {
       go(() => { st.origin = t.dataset.origin; st.step = ""; st.group = ""; st.shown = 60; clearTicks(); });
       return;
     }
-    if (t.dataset.shoot !== undefined) { st.shoot = st.shoot === t.dataset.shoot ? "" : t.dataset.shoot; paint(); return; }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
     if (t.hasAttribute("data-step-add")) {
       st.composer = st.composer?.kind === "add" ? null : { kind: "add", name: "" };
