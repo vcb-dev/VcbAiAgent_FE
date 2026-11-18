@@ -503,9 +503,13 @@ function grid(lib) {
     return craftBoard(lib);
   }
   if (st.lib === "product" && !st.sku) {
-    const rows = skuRows(lib, covRef);
-    if (!rows.length) return `<div class="empty${st._loading ? " is-busy" : ""}">${st._loading ? "Đang tải kho footage…" : "Không có mã khớp. Đổi loại hoặc ô tìm."}</div>`;
-    return `<div class="sku-grid">${rows.map(skuCard).join("")}</div>`;
+    if (st._loading && !skuRows(lib, covRef).length) {
+      return `<div class="empty is-busy">Đang tải kho footage…</div>`;
+    }
+    if (st.q.trim() && !skuRows(lib, covRef).length) {
+      return `<div class="empty">Không có mã khớp. Đổi loại hoặc ô tìm.</div>`;
+    }
+    return `<div class="empty">Bấm một mã ở cột trái để xem clip chế tác, HuyK, thợ, hoàn thiện và outro.</div>`;
   }
   if (st.lib === "product" && st.sku && !st.origin) {
     const rows = originRows(lib);
