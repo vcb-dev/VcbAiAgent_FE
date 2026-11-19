@@ -430,8 +430,6 @@ function stepBoards(clips) {
     shown.add(label);
   };
   extras.forEach((f) => {
-    const tag = tagOf(f.label);
-    if (tag && NEW_SET.has(tag)) return;
     addCustom(f.label, clips.filter((c) => customOf(c) === f.label || String(c.step_label || "").trim() === f.label));
   });
   clips.forEach((c) => {
@@ -478,7 +476,7 @@ function craftBoard(lib) {
   const tools = `<div class="ftools">
       <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
       <div class="sp"></div>
-      <button type="button" class="btn" data-step-add="1">Thêm công đoạn</button>
+      <button type="button" class="btn" data-step-add="1">${cm.kind === "add" ? "Thêm" : "Thêm công đoạn"}</button>
       <button type="button" class="btn pri" data-step-save="1" ${st.dirty && !st.saving ? "" : "disabled"}>${st.saving ? "Đang lưu…" : st.dirty ? "Lưu" : "Đã lưu"}</button>
     </div>
     ${cm.kind === "add" ? `<form id="f-step-form" class="fadd" data-step-kind="add">
@@ -618,6 +616,7 @@ export async function render(view, ctx) {
   let cov = { rows: [], columns: [] };
   let summary = { huyk: 0, outro: 0, illus: 0, skus: {} };
   const folderMemo = new Map();
+  const dirtyAt = new Set();
   let navGen = 0;
   const viewKey = () => {
     if (st.lib === "huyk" || st.origin === "huyk") return "huyk";
@@ -644,7 +643,16 @@ export async function render(view, ctx) {
       try { fromLs = JSON.parse(localStorage.getItem(`vcb-craft:${key}`) || "[]"); } catch { fromLs = []; }
       fromLs = (fromLs || []).filter((f) => f && f.label);
       const memo = folderMemo.get(key) || [];
-      extraFolders = fromApi.length ? fromApi : (memo.length ? memo : fromLs);
+      const live = extraFolders.filter((f) => f?.label);
+      const by = new Map();
+      const lists = dirtyAt.has(key) ? [live, memo, fromLs, fromApi] : [fromApi, fromLs, memo, live];
+      for (const list of lists) {
+        for (const f of list) {
+          if (!f?.label || by.has(f.label)) continue;
+          by.set(f.label, f);
+        }
+      }
+      extraFolders = [...by.values()].sort((a, b) => (Number(a.idx) || 0) - (Number(b.idx) || 0));
       folderMemo.set(key, extraFolders.slice());
     }
     st._loading = false;
@@ -663,7 +671,6 @@ export async function render(view, ctx) {
     paint();
     fillView().then(() => { if (gen === navGen) paint(); });
   };
-  const dirtyAt = new Set();
   const boardKey = () => `${st.sku}|${st.origin}`;
   const syncSaveBtn = () => {
     const btn = el.querySelector("[data-step-save]");
@@ -678,9 +685,11 @@ export async function render(view, ctx) {
     syncSaveBtn();
   };
   const persistFolders = async (rows) => {
-    extraFolders = (rows || stepBoards(boardClips(lib)))
-      .filter((r) => r.label !== "Chưa xếp")
-      .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
+    if (rows) {
+      extraFolders = rows
+        .filter((r) => r.label !== "Chưa xếp")
+        .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
+    }
     if (st.sku && st.origin) {
       folderMemo.set(boardKey(), extraFolders.slice());
       try { localStorage.setItem(`vcb-craft:${boardKey()}`, JSON.stringify(extraFolders)); } catch { /* quota */ }
@@ -844,10 +853,13 @@ export async function render(view, ctx) {
       if (nameTaken(name)) { st.composer = { ...cm, name, err: "Đã có công đoạn này" }; paint(); return; }
       const used = stepBoards(boardClips(lib)).map((r) => Number(r.idx) || 0);
       const idx = Math.max(0, ...used, ...extraFolders.map((f) => Number(f.idx) || 0)) + 1;
-      extraFolders = [...extraFolders, { idx, label: name }];
-      if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
-      try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); st.composer = null; markDirty(); }
-      catch (err) { st.composer = { ...cm, name, err: err.message }; }
+      extraFolders = [...extraFolders, { idx, label: name, step: "" }];
+      if (st.sku && st.origin) {
+        folderMemo.set(boardKey(), extraFolders.slice());
+        try { localStorage.setItem(`vcb-craft:${boardKey()}`, JSON.stringify(extraFolders)); } catch { /* quota */ }
+      }
+      st.composer = null;
+      markDirty();
       paint();
       return;
     }
@@ -1318,9 +1330,14 @@ export async function render(view, ctx) {
       return;
     }
     if (t.hasAttribute("data-step-add")) {
-      st.composer = st.composer?.kind === "add" ? null : { kind: "add", name: "" };
+      if (st.composer?.kind === "add") {
+        commitComposer();
+        return;
+      }
+      st.composer = { kind: "add", name: "" };
       st.boardErr = "";
       paint();
+      el.querySelector("#f-step-name")?.focus();
       return;
     }
     if (t.hasAttribute("data-step-cancel")) {
