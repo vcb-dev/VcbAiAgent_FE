@@ -2,7 +2,8 @@
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
 const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
-  hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "", expand: new Set() };
+  hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "", expand: new Set(),
+  dirty: false, saving: false };
 const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
 const batchIds = (id) => {
   if (!st.checked.size) return [id];
@@ -477,7 +478,8 @@ function craftBoard(lib) {
   const tools = `<div class="ftools">
       <button type="button" class="pill" data-still aria-pressed="${st.hideStill}">Ẩn clip tĩnh</button>
       <div class="sp"></div>
-      <button type="button" class="btn pri" data-step-add="1">Thêm công đoạn</button>
+      <button type="button" class="btn" data-step-add="1">Thêm công đoạn</button>
+      <button type="button" class="btn pri" data-step-save="1" ${st.dirty && !st.saving ? "" : "disabled"}>${st.saving ? "Đang lưu…" : st.dirty ? "Lưu" : "Đã lưu"}</button>
     </div>
     ${cm.kind === "add" ? `<form id="f-step-form" class="fadd" data-step-kind="add">
       <label for="f-step-name">Tên công đoạn</label>
@@ -487,7 +489,7 @@ function craftBoard(lib) {
       ${cm.err ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
     </form>` : ""}
     ${st.boardErr ? `<p class="ferr">${esc(st.boardErr)}</p>` : ""}
-    <p class="muted small" style="margin:0">Giữ <b>≡</b> rồi kéo hàng công đoạn để đổi thứ tự — clip trong hàng đi theo. Tick clip rồi kéo sang hàng khác để chuyển công đoạn.</p>
+    <p class="muted small" style="margin:0">Giữ <b>≡</b> kéo hàng công đoạn. Sửa xong bấm <b>Lưu</b> — thoát ra vào lại vẫn giữ thứ tự.</p>
     <div class="fpick" id="f-picked" ${st.checked.size ? "" : "hidden"}>Đã chọn <b id="f-picked-n">${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
       <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip nguồn này.</div>`;
@@ -650,11 +652,27 @@ export async function render(view, ctx) {
     fn?.();
     const next = `${st.sku}|${st.origin}`;
     extraFolders = folderMemo.get(next) || (`${st.lib}|${st.sku}|${st.origin}` === prev ? extraFolders : []);
+    st.dirty = dirtyAt.has(`${st.sku}|${st.origin}`);
+    st.saving = false;
     const key = viewKey();
     st._loading = !!(key && !pools.has(key));
     const gen = ++navGen;
     paint();
     fillView().then(() => { if (gen === navGen) paint(); });
+  };
+  const dirtyAt = new Set();
+  const boardKey = () => `${st.sku}|${st.origin}`;
+  const syncSaveBtn = () => {
+    const btn = el.querySelector("[data-step-save]");
+    if (!btn) return;
+    btn.disabled = !st.dirty || st.saving;
+    btn.textContent = st.saving ? "Đang lưu…" : st.dirty ? "Lưu" : "Đã lưu";
+  };
+  const markDirty = () => {
+    dirtyAt.add(boardKey());
+    st.dirty = true;
+    st.boardErr = "";
+    syncSaveBtn();
   };
   const persistFolders = async (rows) => {
     extraFolders = (rows || stepBoards(boardClips(lib)))
@@ -683,25 +701,52 @@ export async function render(view, ctx) {
       .filter((r) => r.label !== "Chưa xếp")
       .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
     if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
-    const jobs = [];
     for (const r of ordered) {
       if (r.label === "Chưa xếp") continue;
-      const ids = [];
       for (const c of r.clips || []) {
-        if (Number(c.step_index || 0) !== r.rawIdx) ids.push(c.id);
         c.step_index = r.rawIdx;
         c.step_label = r.label;
       }
+    }
+    markDirty();
+  };
+  const saveCraftBoard = async () => {
+    if (!canSort() || st.saving) return;
+    const labels = stepLabelsFromDom();
+    const by = new Map(stepBoards(boardClips(lib)).map((r) => [r.label, r]));
+    const ordered = (labels.length ? labels : stepBoards(boardClips(lib)).map((r) => r.label)).map((lb, i) => {
+      const r = by.get(lb);
+      return r ? { ...r, idx: i + 1, rawIdx: i + 1 } : null;
+    }).filter(Boolean);
+    extraFolders = ordered
+      .filter((r) => r.label !== "Chưa xếp")
+      .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
+    if (st.sku && st.origin) folderMemo.set(boardKey(), extraFolders.slice());
+    const jobs = [];
+    for (const r of ordered) {
+      if (r.label === "Chưa xếp") continue;
+      const ids = (r.clips || []).map((c) => {
+        c.step_index = r.rawIdx;
+        c.step_label = r.label;
+        return c.id;
+      });
       if (ids.length) jobs.push(api.setClipsFolder(ids, { step_index: r.rawIdx, step_label: r.label }));
     }
+    st.saving = true;
+    syncSaveBtn();
     try {
       await persistFolders(ordered);
       await Promise.all(jobs);
-      toast("Đã đổi thứ tự công đoạn");
+      dirtyAt.delete(boardKey());
+      st.dirty = false;
+      st.boardErr = "";
+      toast("Đã lưu công đoạn");
     } catch (err) {
       st.boardErr = err.message;
-      paintList();
+      toast(err.message, true);
     }
+    st.saving = false;
+    paintList();
   };
   const folderClips = (idx, label) => {
     const row = stepBoards(boardClips(lib)).find((r) => r.label === label
@@ -758,7 +803,7 @@ export async function render(view, ctx) {
     if (!relocateClips(ids, label)) paintList();
     try {
       await api.setClipsFolder(clips.map((c) => c.id), { step_index: idx, step_label: label, craft_step: craft });
-      persistFolders();
+      markDirty();
       return clips.length;
     } catch (err) {
       for (const p of prev) {
@@ -784,7 +829,7 @@ export async function render(view, ctx) {
       const idx = Math.max(0, ...used, ...extraFolders.map((f) => Number(f.idx) || 0)) + 1;
       extraFolders = [...extraFolders, { idx, label: name }];
       if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
-      try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); st.composer = null; }
+      try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); st.composer = null; markDirty(); }
       catch (err) { st.composer = { ...cm, name, err: err.message }; }
       paint();
       return;
@@ -802,6 +847,7 @@ export async function render(view, ctx) {
       }
       await persistFolders();
       st.composer = null;
+      markDirty();
     } catch (err) { st.composer = { ...cm, name, err: err.message }; }
     paint();
   };
@@ -1250,6 +1296,10 @@ export async function render(view, ctx) {
       return;
     }
     if (t.hasAttribute("data-still")) { st.hideStill = !st.hideStill; paint(); return; }
+    if (t.hasAttribute("data-step-save")) {
+      await saveCraftBoard();
+      return;
+    }
     if (t.hasAttribute("data-step-add")) {
       st.composer = st.composer?.kind === "add" ? null : { kind: "add", name: "" };
       st.boardErr = "";
@@ -1288,6 +1338,7 @@ export async function render(view, ctx) {
         extraFolders = extraFolders.filter((f) => !(Number(f.idx) === idx && f.label === label));
         await persistFolders();
         st.composer = null;
+        markDirty();
       } catch (err) {
         st.composer = { ...(st.composer || { kind: "del", idx, label }), err: err.message };
       }
