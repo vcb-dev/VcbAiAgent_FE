@@ -121,6 +121,7 @@ table.t tr:hover td { background: var(--pane-2); }
 .cclip.dragging { opacity: .4; }
 body.clip-dragging, body.clip-dragging *,
 body.step-dragging, body.step-dragging * { cursor: grabbing !important; user-select: none !important; }
+body.step-dragging { touch-action: none; }
 body.clip-dragging .fstrip { overflow: hidden; }
 body.clip-dragging .fstep-act, body.step-dragging .fstep-act { pointer-events: none; }
 .cclip .cchk { position: absolute; top: 6px; right: 6px; z-index: 2; width: 22px; height: 22px; border-radius: 6px;
@@ -921,19 +922,17 @@ summary.rs-h { cursor: pointer; }
 .fedit .in { width: 100%; }
 .ferr { margin: 0; width: 100%; font-size: 13px; color: var(--bad, #b42318); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.fsteps { display: flex; flex-direction: column; gap: 12px; }
 .fstep { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 14px; align-items: start;
-  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane);
-  content-visibility: auto; contain-intrinsic-size: auto 140px; }
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pane); }
 .fstep.drop-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .fstep-h { display: flex; gap: 10px; align-items: flex-start; min-width: 0; flex-wrap: wrap; }
-.fstep-handle { flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px;
+.fstep-handle { flex: none; width: 36px; height: 40px; margin: -6px 0 0 -6px; padding: 0; border: 0; border-radius: 8px;
   display: grid; place-items: center; background: transparent; color: var(--muted); cursor: grab;
   touch-action: none; -webkit-user-select: none; user-select: none; }
 .fstep-handle:hover { background: var(--chip-bg); color: var(--ink); }
 .fstep-handle.is-off { visibility: hidden; pointer-events: none; }
-.fstep.step-dragging { opacity: .42; }
-.fstep.step-drop-before { box-shadow: inset 0 3px 0 var(--accent); }
-.fstep.step-drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+.fstep.step-dragging { opacity: .72; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
 .fstep-act { margin-left: auto; display: flex; gap: 6px; flex: none; }
 .fstep-act .btn.sm { padding: 4px 8px; font-size: 12px; }
 .fstep-n { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
