@@ -605,10 +605,12 @@ export async function render(view, ctx) {
     return out;
   };
   const pull = async (key, params) => {
-    if (pools.has(key)) return pools.get(key);
-    const { clips } = await api.library({ limit: 800, ...params });
-    pools.set(key, clips || []);
-    return clips || [];
+    if (pools.has(key) && (pools.get(key) || []).length) return pools.get(key);
+    const data = await api.library({ limit: 800, ...params });
+    const clips = data.clips || [];
+    if (data.pending && !clips.length) return clips;
+    pools.set(key, clips);
+    return clips;
   };
   el.innerHTML = '<div class="empty is-busy">Đang tải kho footage…</div>';
   let lib = mergeLib();
@@ -635,14 +637,15 @@ export async function render(view, ctx) {
     lib = mergeLib();
     if (st.sku && isCraftOrigin()) {
       const key = `${st.sku}|${st.origin}`;
-      if (folderMemo.has(key)) extraFolders = folderMemo.get(key).slice();
-      else {
-        const fromApi = (await api.emptyFolders(st.sku, st.origin).catch(() => ({ folders: [] }))).folders || [];
-        extraFolders = fromApi
-          .map((f) => ({ idx: Number(f.idx) || 0, label: String(f.label || "").trim() }))
-          .filter((f) => f.label && f.label !== "Chưa xếp");
-        folderMemo.set(key, extraFolders.slice());
-      }
+      const fromApi = ((await api.emptyFolders(st.sku, st.origin).catch(() => ({ folders: [] }))).folders || [])
+        .map((f) => ({ idx: Number(f.idx) || 0, label: String(f.label || "").trim(), step: f.step || "" }))
+        .filter((f) => f.label && f.label !== "Chưa xếp");
+      let fromLs = [];
+      try { fromLs = JSON.parse(localStorage.getItem(`vcb-craft:${key}`) || "[]"); } catch { fromLs = []; }
+      fromLs = (fromLs || []).filter((f) => f && f.label);
+      const memo = folderMemo.get(key) || [];
+      extraFolders = fromApi.length ? fromApi : (memo.length ? memo : fromLs);
+      folderMemo.set(key, extraFolders.slice());
     }
     st._loading = false;
   };
@@ -678,8 +681,14 @@ export async function render(view, ctx) {
     extraFolders = (rows || stepBoards(boardClips(lib)))
       .filter((r) => r.label !== "Chưa xếp")
       .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
-    if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
-    try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
+    if (st.sku && st.origin) {
+      folderMemo.set(boardKey(), extraFolders.slice());
+      try { localStorage.setItem(`vcb-craft:${boardKey()}`, JSON.stringify(extraFolders)); } catch { /* quota */ }
+    }
+    const saved = await api.saveEmptyFolders(st.sku, st.origin, extraFolders);
+    extraFolders = (saved.folders || extraFolders).map((f) => ({
+      idx: Number(f.idx) || 0, label: String(f.label || "").trim(), step: f.step || "",
+    })).filter((f) => f.label);
   };
   const stepLabelsFromDom = () => [...el.querySelectorAll(".fsteps > section.fstep")].map((s) => s.dataset.dropLabel);
   const renumberSteps = () => {
@@ -700,7 +709,10 @@ export async function render(view, ctx) {
     extraFolders = ordered
       .filter((r) => r.label !== "Chưa xếp")
       .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
-    if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
+    if (st.sku && st.origin) {
+      folderMemo.set(boardKey(), extraFolders.slice());
+      try { localStorage.setItem(`vcb-craft:${boardKey()}`, JSON.stringify(extraFolders)); } catch { /* quota */ }
+    }
     for (const r of ordered) {
       if (r.label === "Chưa xếp") continue;
       for (const c of r.clips || []) {
@@ -721,7 +733,10 @@ export async function render(view, ctx) {
     extraFolders = ordered
       .filter((r) => r.label !== "Chưa xếp")
       .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
-    if (st.sku && st.origin) folderMemo.set(boardKey(), extraFolders.slice());
+    if (st.sku && st.origin) {
+      folderMemo.set(boardKey(), extraFolders.slice());
+      try { localStorage.setItem(`vcb-craft:${boardKey()}`, JSON.stringify(extraFolders)); } catch { /* quota */ }
+    }
     const jobs = [];
     for (const r of ordered) {
       if (r.label === "Chưa xếp") continue;
@@ -736,11 +751,13 @@ export async function render(view, ctx) {
     syncSaveBtn();
     try {
       await persistFolders(ordered);
-      await Promise.all(jobs);
+      const results = await Promise.all(jobs);
+      const missing = results.flatMap((r) => r.missing || []);
+      pools.delete(viewKey());
       dirtyAt.delete(boardKey());
       st.dirty = false;
       st.boardErr = "";
-      toast("Đã lưu công đoạn");
+      toast(missing.length ? `Đã lưu · ${missing.length} clip không khớp catalog` : "Đã lưu công đoạn");
     } catch (err) {
       st.boardErr = err.message;
       toast(err.message, true);
