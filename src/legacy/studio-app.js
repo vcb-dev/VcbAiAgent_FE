@@ -30,8 +30,10 @@ function renderTopbar(s) {
   $("busy-chip").classList.toggle("hidden", !s.busy && s.job?.render.status !== "rendering");
   $("busy-chip").textContent = s.busy ? `${s.busy}…` : "Đang dựng lại video…";
   const sel = $("outro-select");
-  const cur = s.job?.settings?.outro === false ? "" : s.job?.outro?.clip_id || "";
-  const opts = [["", "Không outro"], ...outros.map((o) => [o.clip_id, o.label])];
+  const off = s.job?.settings?.outro === false || (s.job && s.job.lang && s.job.lang !== "vi");
+  const cur = off ? "" : s.job?.outro?.clip_id || "";
+  const emptyLabel = !s.job ? "—" : off ? "Không outro" : (outros.length ? "Chọn outro HuyK" : "Chưa có clip outro");
+  const opts = [["", emptyLabel], ...outros.map((o) => [o.clip_id, o.label])];
   if (s.job?.outro && !outros.some((o) => o.clip_id === s.job.outro.clip_id)) opts.push([s.job.outro.clip_id, s.job.outro.label]);
   const html = opts.map(([v, l]) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(l)}</option>`).join("");
   if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
@@ -95,7 +97,16 @@ export async function startStudio() {
     else if (e.target.closest("#timeline .tl-block[data-shot]") && matchMedia("(max-width: 700px)").matches) setPane("insp");
   });
   refreshRailBadges();
-  api.outros().then((r) => { outros = r.items.filter((o) => o.kind === "huyk"); emit(); }).catch(() => {});
+  api.outros().then((r) => {
+    const items = r.items || [];
+    const huyk = items.filter((o) => o.kind === "huyk");
+    outros = huyk.length ? huyk : items;
+    emit();
+    const job = store.job;
+    if (job?.lang === "vi" && job.settings?.outro !== false && !job.outro?.clip_id && outros[0]?.clip_id) {
+      actions.outro(outros[0].clip_id);
+    }
+  }).catch(() => {});
   $("outro-select").addEventListener("change", (e) => actions.outro(e.target.value));
   $("undo-btn").addEventListener("click", () => actions.undo());
   $("tl-split").addEventListener("click", () => { const sh = currentShot(); if (sh) actions.split(sh.part_id, sh.index); });

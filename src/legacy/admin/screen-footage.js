@@ -406,7 +406,7 @@ function stepBoards(clips) {
       if (c.craft_step === "__folder") return false;
       return step === "__unsorted" ? unsorted(c) : c.craft_step === step;
     });
-    const kept = extraLabels.has(label);
+    const kept = extraLabels.has(label) && !NEW_SET.has(step);
     if (!list.length && !kept && step !== "__unsorted") return;
     if (!list.length && step === "__unsorted") return;
     rows.push({
@@ -428,12 +428,40 @@ function stepBoards(clips) {
     rows.push({ drop, label, tag, clips: list });
     shown.add(label);
   };
-  extras.forEach((f) => addCustom(f.label, clips.filter((c) => customOf(c) === f.label || String(c.step_label || "").trim() === f.label)));
+  extras.forEach((f) => {
+    const tag = tagOf(f.label);
+    if (tag && NEW_SET.has(tag)) return;
+    addCustom(f.label, clips.filter((c) => customOf(c) === f.label || String(c.step_label || "").trim() === f.label));
+  });
   clips.forEach((c) => {
     const lb = customOf(c);
     if (lb && !shown.has(lb)) addCustom(lb, clips.filter((x) => customOf(x) === lb));
   });
-  return rows.map((row, i) => ({ ...row, idx: i + 1, rawIdx: i + 1 }));
+  const rank = new Map();
+  extras.forEach((f) => {
+    if (f.label && !rank.has(f.label)) rank.set(f.label, Number(f.idx) || rank.size + 1);
+  });
+  const pinned = [];
+  const rest = [];
+  rows.forEach((row) => {
+    if (row.label === "Chưa xếp") pinned.push(row);
+    else rest.push(row);
+  });
+  const rowRank = (row, i) => {
+    if (rank.has(row.label)) return Number(rank.get(row.label));
+    const fromClips = (row.clips || []).map((c) => Number(c.step_index)).filter((n) => Number.isFinite(n) && n > 0 && n < 900);
+    if (fromClips.length) return Math.min(...fromClips);
+    const ni = NEW_STEPS.indexOf(row.tag || row.drop);
+    return ni >= 0 ? 100 + ni : 400 + i;
+  };
+  rest.forEach((row, i) => { row._ord = rowRank(row, i); row._i = i; });
+  rest.sort((a, b) => (a._ord - b._ord) || (a._i - b._i));
+  return [...pinned, ...rest].map((row, i) => {
+    const next = { ...row, idx: i + 1, rawIdx: i + 1 };
+    delete next._ord;
+    delete next._i;
+    return next;
+  });
 }
 function stripHtml(row) {
   const list = row.clips || [];
@@ -459,7 +487,7 @@ function craftBoard(lib) {
       ${cm.err ? `<p class="ferr">${esc(cm.err)}</p>` : ""}
     </form>` : ""}
     ${st.boardErr ? `<p class="ferr">${esc(st.boardErr)}</p>` : ""}
-    <p class="muted small" style="margin:0">Tick các clip, rồi giữ kéo vào <b>một hàng công đoạn đã có</b>. Kéo ra ngoài không tạo mục mới.</p>
+    <p class="muted small" style="margin:0">Giữ <b>≡</b> rồi kéo hàng công đoạn để đổi thứ tự — clip trong hàng đi theo. Tick clip rồi kéo sang hàng khác để chuyển công đoạn.</p>
     <div class="fpick" id="f-picked" ${st.checked.size ? "" : "hidden"}>Đã chọn <b id="f-picked-n">${st.checked.size}</b> clip — kéo cả cụm sang công đoạn khác.
       <button type="button" class="btn sm" data-uncheck>Bỏ chọn</button></div>`;
   if (!rows.length) return `${tools}<div class="empty">Không có clip nguồn này.</div>`;
@@ -486,8 +514,14 @@ function craftBoard(lib) {
         : `<button type="button" class="btn sm" data-check-row="${esc(row.label)}" data-step-idx="${row.rawIdx}">${row.clips.length && row.clips.every((c) => st.checked.has(c.id)) ? "Bỏ chọn" : "Chọn hết"}</button>
            <button type="button" class="btn sm" data-step-edit="${esc(row.label)}" data-step-idx="${row.rawIdx}">Sửa</button>
            ${locked ? "" : `<button type="button" class="btn sm" data-step-del="${esc(row.label)}" data-step-idx="${row.rawIdx}">Xóa</button>`}`;
-    return `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.rawIdx}" data-drop-label="${esc(row.label)}">
+    const handle = locked
+      ? `<span class="fstep-handle is-off" aria-hidden="true"></span>`
+      : `<button type="button" class="fstep-handle" data-step-handle="1" draggable="false" title="Giữ rồi kéo để đổi thứ tự" aria-label="Kéo đổi thứ tự ${esc(row.label)}">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="3.5" width="10" height="1.7" rx=".6"/><rect x="3" y="7.15" width="10" height="1.7" rx=".6"/><rect x="3" y="10.8" width="10" height="1.7" rx=".6"/></svg>
+        </button>`;
+    return `<section class="fstep" data-drop-step="${esc(row.drop)}" data-drop-idx="${row.rawIdx}" data-drop-label="${esc(row.label)}"${locked ? " data-step-locked=\"1\"" : ""}>
       <div class="fstep-h">
+        ${handle}
         <span class="fstep-n">${row.idx}</span>
         ${title}
         <span class="fstep-act">${act}</span>
@@ -624,10 +658,46 @@ export async function render(view, ctx) {
   };
   const persistFolders = async () => {
     extraFolders = stepBoards(boardClips(lib))
-      .filter((r) => r.label !== "Chưa xếp" && (r.drop === "__folder" || !r.clips.length))
-      .map((r) => ({ idx: r.rawIdx, label: r.label }));
+      .filter((r) => r.label !== "Chưa xếp")
+      .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
     if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
     try { await api.saveEmptyFolders(st.sku, st.origin, extraFolders); } catch { /* local still paints */ }
+  };
+  const applyStepOrder = async (fromLabel, toLabel, place) => {
+    if (!fromLabel || !toLabel || fromLabel === "Chưa xếp") return;
+    const rows = stepBoards(boardClips(lib));
+    const from = rows.findIndex((r) => r.label === fromLabel);
+    let to = rows.findIndex((r) => r.label === toLabel);
+    if (from < 0 || to < 0 || from === to) return;
+    const [moved] = rows.splice(from, 1);
+    if (to > from) to -= 1;
+    let insert = place === "after" ? to + 1 : to;
+    if (rows[0]?.label === "Chưa xếp") insert = Math.max(1, insert);
+    rows.splice(insert, 0, moved);
+    const ordered = rows.map((r, i) => ({ ...r, idx: i + 1, rawIdx: i + 1 }));
+    extraFolders = ordered
+      .filter((r) => r.label !== "Chưa xếp")
+      .map((r) => ({ idx: r.rawIdx, label: r.label, step: r.tag || r.drop || "" }));
+    if (st.sku && st.origin) folderMemo.set(`${st.sku}|${st.origin}`, extraFolders.slice());
+    const jobs = [];
+    for (const r of ordered) {
+      if (r.label === "Chưa xếp") continue;
+      const ids = [];
+      for (const c of r.clips || []) {
+        if (Number(c.step_index || 0) !== r.rawIdx) ids.push(c.id);
+        c.step_index = r.rawIdx;
+        c.step_label = r.label;
+      }
+      if (ids.length) jobs.push(api.setClipsFolder(ids, { step_index: r.rawIdx, step_label: r.label }));
+    }
+    try {
+      await persistFolders();
+      await Promise.all(jobs);
+      toast("Đã đổi thứ tự công đoạn");
+    } catch (err) {
+      st.boardErr = err.message;
+    }
+    paintList();
   };
   const folderClips = (idx, label) => {
     const row = stepBoards(boardClips(lib)).find((r) => r.label === label
@@ -880,6 +950,25 @@ export async function render(view, ctx) {
   })();
   let dragging = false;
   const drag = { ready: null, on: false, ids: [], ghost: null, row: null };
+  const rowDrag = { ready: null, on: false, from: null, ghost: null, target: null, place: "before", hold: 0 };
+  const clearRowMarks = () => {
+    el.querySelectorAll(".fstep.step-dragging,.fstep.step-drop-before,.fstep.step-drop-after").forEach((x) => {
+      x.classList.remove("step-dragging", "step-drop-before", "step-drop-after");
+    });
+  };
+  const clearRowDrag = () => {
+    if (rowDrag.hold) clearTimeout(rowDrag.hold);
+    rowDrag.hold = 0;
+    rowDrag.ready = null;
+    rowDrag.on = false;
+    rowDrag.from = null;
+    rowDrag.target = null;
+    rowDrag.place = "before";
+    rowDrag.ghost?.remove();
+    rowDrag.ghost = null;
+    document.body.classList.remove("step-dragging");
+    clearRowMarks();
+  };
   const clearDrag = () => {
     drag.ready = null;
     drag.on = false;
@@ -943,14 +1032,91 @@ export async function render(view, ctx) {
     if (dest) dest.el.classList.add("drop-on");
     drag.row = dest?.el || null;
   };
+  const startRowDrag = (e) => {
+    if (!rowDrag.ready || rowDrag.on) return;
+    const sec = rowDrag.ready.el;
+    if (!sec || sec.dataset.stepLocked) { clearRowDrag(); return; }
+    rowDrag.on = true;
+    dragging = true;
+    rowDrag.from = sec;
+    sec.classList.add("step-dragging");
+    rowDrag.ghost = document.createElement("div");
+    rowDrag.ghost.className = "cdrag-ghost";
+    rowDrag.ghost.textContent = sec.dataset.dropLabel || "Công đoạn";
+    document.body.appendChild(rowDrag.ghost);
+    document.body.classList.add("step-dragging");
+    const pid = rowDrag.ready.pointerId;
+    rowDrag.ready = null;
+    if (pid != null) {
+      try { e.target?.setPointerCapture?.(pid); } catch { /* ignore */ }
+    }
+    moveRowGhost(e);
+  };
+  const moveRowGhost = (e) => {
+    if (!rowDrag.ghost) return;
+    rowDrag.ghost.style.left = `${e.clientX + 14}px`;
+    rowDrag.ghost.style.top = `${e.clientY + 14}px`;
+    const pane = paneScroll();
+    if (pane) {
+      const box = pane.getBoundingClientRect();
+      if (e.clientY < box.top + 56) pane.scrollTop -= 18;
+      else if (e.clientY > box.bottom - 56) pane.scrollTop += 18;
+    }
+    const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("section.fstep");
+    clearRowMarks();
+    rowDrag.from?.classList.add("step-dragging");
+    if (!hit || hit === rowDrag.from) {
+      rowDrag.target = null;
+      return;
+    }
+    const mid = hit.getBoundingClientRect().top + hit.getBoundingClientRect().height / 2;
+    const place = e.clientY < mid ? "before" : "after";
+    if (hit.dataset.stepLocked && place === "before") {
+      rowDrag.target = hit;
+      rowDrag.place = "after";
+      hit.classList.add("step-drop-after");
+      return;
+    }
+    rowDrag.target = hit;
+    rowDrag.place = place;
+    hit.classList.add(place === "before" ? "step-drop-before" : "step-drop-after");
+  };
   const onDown = (e) => {
     if (e.button) return;
     if (e.target.closest("[data-check], .fstep-act, input, select, textarea, form, [data-uncheck]")) return;
+    const handle = e.target.closest("[data-step-handle]");
+    if (handle) {
+      const sec = handle.closest("section.fstep");
+      if (!sec || sec.dataset.stepLocked || !canSort()) return;
+      e.preventDefault();
+      rowDrag.ready = { el: sec, x: e.clientX, y: e.clientY, pointerId: e.pointerId, type: e.pointerType };
+      if (rowDrag.hold) clearTimeout(rowDrag.hold);
+      rowDrag.hold = setTimeout(() => startRowDrag(e), 180);
+      return;
+    }
     const card = e.target.closest("[data-clip]");
     if (!card || !canSort()) return;
     drag.ready = { ids: batchIds(card.dataset.clip), x: e.clientX, y: e.clientY, pointerId: e.pointerId, type: e.pointerType };
   };
   const onMove = (e) => {
+    if (rowDrag.ready || rowDrag.on) {
+      if (rowDrag.ready && !rowDrag.on) {
+        const dx = e.clientX - rowDrag.ready.x;
+        const dy = e.clientY - rowDrag.ready.y;
+        if (dx * dx + dy * dy < 36) return;
+        if (rowDrag.hold) { clearTimeout(rowDrag.hold); rowDrag.hold = 0; }
+        startRowDrag(e);
+      }
+      if (!rowDrag.on) return;
+      e.preventDefault();
+      if (rowDrag._raf) return;
+      rowDrag._e = e;
+      rowDrag._raf = requestAnimationFrame(() => {
+        rowDrag._raf = 0;
+        if (rowDrag.on && rowDrag._e) moveRowGhost(rowDrag._e);
+      });
+      return;
+    }
     if (!drag.ready && !drag.on) return;
     if (drag.ready && !drag.on) {
       const dx = e.clientX - drag.ready.x;
@@ -996,6 +1162,16 @@ export async function render(view, ctx) {
     }
   };
   const onUp = () => {
+    if (rowDrag.ready || rowDrag.on) {
+      const fromLabel = rowDrag.from?.dataset.dropLabel;
+      const toLabel = rowDrag.target?.dataset.dropLabel;
+      const place = rowDrag.place;
+      const wasRow = rowDrag.on;
+      clearRowDrag();
+      setTimeout(() => { dragging = false; }, 0);
+      if (wasRow && fromLabel && toLabel && fromLabel !== toLabel) applyStepOrder(fromLabel, toLabel, place);
+      return;
+    }
     const row = drag.row;
     const ids = drag.ids;
     const was = drag.on;
@@ -1035,7 +1211,8 @@ export async function render(view, ctx) {
     if (libk === "huyk" || libk === "outro" || libk === "illus") pull(libk, { library: libk }).catch(() => {});
   });
   el.addEventListener("click", async (e) => {
-    if (dragging || drag.on) { e.preventDefault(); e.stopPropagation(); return; }
+    if (dragging || drag.on || rowDrag.on) { e.preventDefault(); e.stopPropagation(); return; }
+    if (e.target.closest("[data-step-handle]")) { e.preventDefault(); return; }
     const box = e.target.closest("[data-check]");
     if (box) {
       e.preventDefault();
