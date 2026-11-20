@@ -501,7 +501,6 @@ function paintProductHint() {
 let _metaSeq = 0;
 async function fillProductMeta(sku) {
   if (!sku) return;
-  const have = (productOf()?.step_detail || []).length;
   const seq = ++_metaSeq;
   try {
     const { clips } = await api.library({ sku, limit: 400 });
@@ -510,7 +509,7 @@ async function fillProductMeta(sku) {
     store.boot.library = [...(clips || []), ...keep];
     store.boot._libSku = sku;
     const p = productOf();
-    if (p && (clips || []).length && !have) Object.assign(p, metaFromClips(clips || []));
+    if (p && (clips || []).length) Object.assign(p, metaFromClips(clips || []));
     paintProductHint();
     paintA4();
   } catch {
