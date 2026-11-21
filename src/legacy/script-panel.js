@@ -138,6 +138,11 @@ function paintVoice() {
     : v ? "Footage sẽ được cắt ghép đúng theo độ dài voice này." : "Chưa tạo voice: lúc dựng, hệ thống đọc bằng giọng MiniMax đang chọn.";
   $("voice-dur").textContent = v ? fmt(v.duration || 0) : "";
   $("build-hint").textContent = v && !voiceStale() ? `Dựng theo voice ${(v.duration || 0).toFixed(1)}s → video ≈ ${fmt((v.duration || 0) + 1)}` : "";
+  if (st.a4) {
+    const before = (st.a4.slots || []).map((s) => s.seconds).join(",");
+    applySlotSeconds(st.a4);
+    if (before !== (st.a4.slots || []).map((s) => s.seconds).join(",")) paintA4();
+  }
 }
 
 function savedVoice(c, lang, script) {
@@ -241,13 +246,10 @@ const A4_KINDS = [
   { key: "product:final", from: "product", variant: "final", role: "Sản phẩm hoàn thiện", seconds: 8 },
   { key: "outro", from: "outro", role: "Outro", seconds: 4 },
 ];
-const A4_FORMULA = [
-  ["thiet_ke", "chuan_bi_nguyen_lieu", "nung_nau"],
-  ["do_khuon", "dap_can", "tao_dang", "cua_cat"],
-  ["han", "dua_mai", "khoan", "gan_da_chu"],
-  ["dinh_da", "lam_sach", "danh_bong", "khac_laser", "hoan_thien"],
-];
+const FINAL_SEC = 8;
+const ORIGIN_LABEL = { huyk_sp: "HuyK chế tác", tho: "Thợ xưởng", legacy: "Kho cũ" };
 const a4Key = (s) => (s.from === "product" ? `product:${s.variant || "hero"}` : s.from);
+const isFinalSlot = (s) => s.from === "product" && s.variant === "final";
 
 function withSlotIndex(slots) {
   const count = { craft: 0, huyk: 0 };
@@ -268,34 +270,88 @@ function withSlotIndex(slots) {
   });
 }
 
-function spreadCraft(steps) {
-  const ordered = (steps || []).filter((s) => s.step && s.step !== "hoan_thien");
-  const count = Math.min(4, ordered.length);
-  if (count <= 1) return ordered.slice(0, count).map((s, at) => ({ step: s.step, name: s.label, at }));
-  const picks = [];
-  let last = -1;
-  for (let i = 0; i < count; i++) {
-    let idx = Math.round(i * (ordered.length - 1) / (count - 1));
-    if (idx <= last) idx = last + 1;
-    if (idx >= ordered.length) break;
-    last = idx;
-    const s = ordered[idx];
-    picks.push({ step: s.step, name: s.label, at: picks.length });
-  }
-  return picks;
+function craftSlotCount(slots) {
+  return withSlotIndex(slots || A4_SLOTS).filter((s) => s.from === "craft").length || 4;
 }
 
-function formulaCraft(steps, randomize) {
-  if (!randomize) return spreadCraft(steps);
-  const have = new Map((steps || []).map((s) => [s.step, s]));
-  const used = new Set();
-  return A4_FORMULA.map((group, at) => {
-    const choices = group.filter((id) => have.has(id) && !used.has(id));
-    if (!choices.length) return null;
-    const id = choices[Math.floor(Math.random() * choices.length)];
-    used.add(id);
-    return { step: id, name: have.get(id).label, at };
-  }).filter(Boolean).map((row, at) => ({ ...row, at }));
+function orderedCraftSteps(steps) {
+  return (steps || []).filter((s) => s.step && s.step !== "hoan_thien" && s.step !== "__unsorted");
+}
+
+function formulaCraft(steps, randomize, slots) {
+  const ordered = orderedCraftSteps(steps);
+  const n = Math.min(craftSlotCount(slots), ordered.length);
+  if (!n) return [];
+  let start = 0;
+  if (randomize && ordered.length > n) start = Math.floor(Math.random() * (ordered.length - n + 1));
+  return ordered.slice(start, start + n).map((s, at) => ({ step: s.step, name: s.label, at }));
+}
+
+function originLists(p) {
+  const out = {};
+  const detail = p?.origin_detail || {};
+  for (const key of ["huyk_sp", "tho", "legacy"]) {
+    const rows = orderedCraftSteps(detail[key] || []);
+    if (rows.length) out[key] = rows;
+  }
+  return out;
+}
+
+function originKeys(p) {
+  const lists = originLists(p);
+  const keys = Object.keys(lists).filter((k) => k === "huyk_sp" || k === "tho");
+  return keys.length ? keys : Object.keys(lists);
+}
+
+function applyCraftChain(draft, p, fromAt) {
+  if (!draft) return;
+  const origin = draft.craftOrigin;
+  const ordered = (origin && originLists(p)[origin]) || [];
+  const seq = withSlotIndex(draft.slots).filter((s) => s.from === "craft" && draft.craft?.[s.at]?.sequential);
+  if (!seq.length || !ordered.length || !origin) return;
+  const head = fromAt == null ? seq[0] : (seq.find((s) => s.at === fromAt) || seq[0]);
+  const rest = seq.filter((s) => s.at >= head.at);
+  let start = ordered.findIndex((s) => s.step === draft.craft[head.at]?.step);
+  if (start < 0) start = 0;
+  rest.forEach((slot, i) => {
+    const step = ordered[Math.min(start + i, ordered.length - 1)];
+    draft.craft[slot.at] = { step: step.step, name: step.label, at: slot.at, sequential: true, origin };
+  });
+}
+
+function enableCraftSeq(draft, p, at, on) {
+  draft.craft = draft.craft || [];
+  const row = { ...(draft.craft[at] || { at }), at, sequential: !!on };
+  draft.craft[at] = row;
+  if (!on) {
+    draft.craft[at] = { ...row, sequential: false };
+    applyCraftChain(draft, p);
+    return;
+  }
+  const keys = originKeys(p);
+  if (!draft.craftOrigin && keys.length === 1) draft.craftOrigin = keys[0];
+  withSlotIndex(draft.slots).filter((s) => s.from === "craft").forEach((s) => {
+    draft.craft[s.at] = { ...(draft.craft[s.at] || { at: s.at }), at: s.at, sequential: true, origin: draft.craftOrigin || null };
+  });
+  applyCraftChain(draft, p);
+}
+
+function applySlotSeconds(draft, force) {
+  if (!draft?.slots?.length) return draft;
+  const slots = withSlotIndex(draft.slots);
+  const voice = Number(st.voice?.duration) || 0;
+  const share = slots.filter((s) => !isFinalSlot(s) && s.from !== "outro");
+  const n = share.length;
+  const remain = voice > 0 ? Math.max(n * 1.5, voice - FINAL_SEC) : 0;
+  const each = n && remain ? Math.round((remain / n) * 10) / 10 : 0;
+  draft.slots = slots.map((s) => {
+    if (isFinalSlot(s)) return { ...s, seconds: FINAL_SEC };
+    if (s.from === "outro") return { ...s, seconds: s.manualSec && !force ? s.seconds : (s.seconds || 4) };
+    if (s.manualSec && !force) return s;
+    const sec = each || s.seconds || (s.from === "huyk" ? 4 : s.from === "craft" ? 3 : 5);
+    return { ...s, seconds: sec };
+  });
+  return draft;
 }
 
 function productOf() {
@@ -308,11 +364,13 @@ function ensureA4() {
   if (st.a4?.sku === p.sku) return st.a4;
   const saved = store.job?.a4_line && store.job.sku === p.sku ? store.job.a4_plan : null;
   if (saved?.slots?.length) {
-    st.a4 = { sku: p.sku, slots: saved.slots.map((s) => ({ ...s, from: s.from || s.kind })), craft: saved.craft || [], huyk: saved.huyk || [] };
+    st.a4 = { sku: p.sku, slots: saved.slots.map((s) => ({ ...s, from: s.from || s.kind })), craft: saved.craft || [], huyk: saved.huyk || [], craftOrigin: saved.craft_origin || saved.craftOrigin || null };
+    applySlotSeconds(st.a4);
     return st.a4;
   }
   const huyk = st.huyk.slice(0, 2).map((h, at) => ({ name: h.name, path: h.name, at }));
-  st.a4 = { sku: p.sku, slots: A4_SLOTS.map((s) => ({ ...s })), craft: formulaCraft(p.step_detail), huyk };
+  st.a4 = { sku: p.sku, slots: A4_SLOTS.map((s) => ({ ...s })), craft: formulaCraft(p.step_detail, false, A4_SLOTS), huyk };
+  applySlotSeconds(st.a4, true);
   return st.a4;
 }
 
@@ -332,7 +390,8 @@ async function liveA4(index) {
   if (!slot || !part || store.busy) return;
   const craft = slot.from === "craft" ? draft.craft?.[slot.at]?.step : null;
   const huyk = slot.from === "huyk" ? draft.huyk?.[slot.at]?.name : null;
-  return actions.source(part.part_id, a4Role(slot), craft, huyk);
+  const origin = slot.from === "craft" ? (draft.craft?.[slot.at]?.origin || draft.craftOrigin) : null;
+  return actions.source(part.part_id, a4Role(slot), craft, huyk, origin);
 }
 
 function a4Payload() {
@@ -341,8 +400,9 @@ function a4Payload() {
   const slots = withSlotIndex(draft.slots).filter((s) => st.lang === "vi" || s.from !== "outro");
   return {
     slots: slots.map((s) => ({ kind: s.from, variant: s.variant || null, seconds: s.seconds, at: s.at ?? null })),
-    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at })),
+    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || draft.craftOrigin || null, sequential: !!c.sequential })),
     huyk: (draft.huyk || []).filter(Boolean).map((h) => ({ name: h.name, path: h.path || h.name, at: h.at })),
+    craft_origin: draft.craftOrigin || null,
   };
 }
 
@@ -359,25 +419,36 @@ function paintA4() {
   const steps = p.step_detail || [];
   const name = (p.name || p.sku).replace(/-/g, " ");
   root.innerHTML = `<div class="sec-title"><span>Footage theo tuyến A4</span><span class="a4-tools">
-      <button class="small-btn" type="button" data-a4="formula" ${steps.length ? "" : "disabled"}>Theo thứ tự công đoạn</button>
-      <button class="small-btn" type="button" data-a4="reshuffle" title="Bốc tổ hợp công đoạn khác">↻ đổi cảnh</button></span></div>
-    <div class="hint">Đổi loại ô (Sản phẩm / HuyK / Chế tác). Outro + logo chỉ bản tiếng Việt. “Theo thứ tự công đoạn” lấy 4 ô từ đầu tới cuối quy trình, không nhảy lùi.</div>
+      <button class="small-btn" type="button" data-a4="reshuffle" title="Bốc cảnh HuyK khác">↻ đổi cảnh HuyK</button></span></div>
+    <div class="hint">Tick “Theo thứ tự công đoạn” trên ô Chế tác rồi chọn kho HuyK chế tác hoặc Thợ xưởng. Các ô chế tác cùng kho sẽ lấy bước liền kề. Hoàn thiện cố định ${FINAL_SEC}s; ô khác chia đều theo voice.</div>
     ${slots.map((s, i) => {
       if (s.from === "outro" && st.lang !== "vi") return "";
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
       const kinds = st.lang === "vi" ? A4_KINDS : A4_KINDS.filter((k) => k.key !== "outro");
-      const kindOpts = kinds.map((k) => `<option value="${k.key}" ${a4Key(s) === k.key ? "selected" : ""}>${esc(s.from === "craft" && k.key === "craft" ? s.role : k.role)} · ${k.seconds}s</option>`).join("");
+      const kindOpts = kinds.map((k) => `<option value="${k.key}" ${a4Key(s) === k.key ? "selected" : ""}>${esc(s.from === "craft" && k.key === "craft" ? s.role : k.role)}</option>`).join("");
+      const secLocked = isFinalSlot(s);
+      const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${Number(s.seconds) || 1}" ${secLocked ? "disabled" : ""} title="${secLocked ? `Hoàn thiện cố định ${FINAL_SEC}s` : "Giây công đoạn"}" aria-label="Giây ô ${i + 1}">`;
+      let extraRow = "";
       let src = `<b>${esc(s.from === "product" ? name : "kho outro · chỉ tiếng Việt")}</b>`;
       if (s.from === "product") {
         const n = s.variant === "final" ? (p.final_clips || 0) : (p.hero_clips || 0);
         src = `<b>${esc(name)}</b><span class="muted"> · ${n} clip</span>`;
       }
       if (s.from === "craft") {
-        const extra = current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
-        src = `<span class="slot-src"><select data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}">
+        const seqOn = !!current?.sequential;
+        const origin = draft.craftOrigin || current?.origin || "";
+        const lists = originLists(p);
+        const stepPool = (seqOn && origin && lists[origin]) ? lists[origin] : steps;
+        const extra = current?.step && !stepPool.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
+        const seqCraft = withSlotIndex(draft.slots).filter((x) => x.from === "craft" && draft.craft?.[x.at]?.sequential);
+        const chainHead = seqCraft[0]?.at === s.at;
+        const originOpts = originKeys(p).map((k) => `<option value="${esc(k)}" ${origin === k ? "selected" : ""}>${esc(ORIGIN_LABEL[k] || k)}</option>`).join("");
+        src = `<span class="slot-src"><select data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}" ${seqOn && !chainHead ? "disabled" : ""}>
             ${current?.step ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
-            ${steps.map((st) => `<option value="${esc(st.step)}" ${current?.step === st.step ? "selected" : ""}>${esc(st.label)} · ${st.clips} clip</option>`).join("")}
-          </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn khác trong nhóm">↻</button></span>`;
+            ${stepPool.map((st) => `<option value="${esc(st.step)}" ${current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
+          </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn" ${seqOn && !chainHead ? "disabled" : ""}>↻</button></span>`;
+        extraRow = `<div class="a4-slot-extra"><label class="a4-seq"><input type="checkbox" data-a4="seq" data-i="${i}" ${seqOn ? "checked" : ""}>Theo thứ tự công đoạn</label>
+          ${seqOn ? `<select class="a4-origin" data-a4="origin" data-i="${i}" aria-label="Kho chế tác">${origin ? "" : `<option value="">— chọn kho —</option>`}${originOpts}</select>` : ""}</div>`;
       } else if (s.from === "huyk") {
         const known = st.huyk.some((h) => h.name === current?.name);
         src = `<span class="slot-src"><select data-a4="huyk" data-i="${i}" aria-label="Cảnh HuyK">
@@ -386,7 +457,7 @@ function paintA4() {
             ${st.huyk.map((h) => `<option value="${esc(h.name)}" ${current?.name === h.name ? "selected" : ""}>${esc(h.label)} · ${h.clips}</option>`).join("")}
           </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Bốc cảnh HuyK khác">↻</button></span>`;
       }
-      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}" aria-label="Loại ô ${i + 1}">${kindOpts}</select>${src}</div></div>`;
+      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}" aria-label="Loại ô ${i + 1}">${kindOpts}</select>${secBox}${src}</div>${extraRow}</div>`;
     }).join("")}
     ${steps.length ? "" : `<div class="hint">Mã ${esc(p.sku)} chưa có công đoạn chế tác trong catalog.</div>`}`;
 }
@@ -401,20 +472,39 @@ function onA4Change(e) {
   if (act === "kind") {
     const kind = A4_KINDS.find((k) => k.key === e.target.value);
     if (!kind) return;
-    draft.slots = withSlotIndex(draft.slots.map((s, n) => n === i ? { from: kind.from, variant: kind.variant, seconds: kind.seconds } : s));
+    draft.slots = withSlotIndex(draft.slots.map((s, n) => n === i ? { from: kind.from, variant: kind.variant } : s));
+    applySlotSeconds(draft);
     const next = withSlotIndex(draft.slots)[i];
     if (next.from === "craft" && !draft.craft?.[next.at]) {
       const step = (productOf()?.step_detail || [])[0];
       if (step) draft.craft[next.at] = { step: step.step, name: step.label, at: next.at };
     }
     if (next.from === "huyk" && !draft.huyk?.[next.at] && st.huyk[0]) draft.huyk[next.at] = { name: st.huyk[0].name, path: st.huyk[0].name, at: next.at };
+  } else if (act === "seq" && slot?.from === "craft") {
+    enableCraftSeq(draft, productOf(), slot.at, e.target.checked);
+  } else if (act === "origin" && slot?.from === "craft" && e.target.value) {
+    draft.craftOrigin = e.target.value;
+    enableCraftSeq(draft, productOf(), slot.at, true);
   } else if (act === "craft" && slot?.from === "craft" && e.target.value) {
-    const step = (productOf()?.step_detail || []).find((s) => s.step === e.target.value);
-    draft.craft[slot.at] = { step: e.target.value, name: step?.label || e.target.value, at: slot.at };
+    const p = productOf();
+    const origin = draft.craftOrigin;
+    const pool = (draft.craft?.[slot.at]?.sequential && origin && originLists(p)[origin]) || p?.step_detail || [];
+    const step = pool.find((s) => s.step === e.target.value);
+    draft.craft[slot.at] = { ...(draft.craft[slot.at] || {}), step: e.target.value, name: step?.label || e.target.value, at: slot.at };
+    if (draft.craft[slot.at].sequential) applyCraftChain(draft, p, slot.at);
   } else if (act === "huyk" && slot?.from === "huyk" && e.target.value) {
     draft.huyk[slot.at] = { name: e.target.value, path: e.target.value, at: slot.at };
+  } else if (act === "sec" && slot) {
+    const sec = Number(e.target.value);
+    if (!(sec > 0)) return;
+    draft.slots = slots.map((s, n) => n === i ? { ...s, seconds: Math.round(sec * 10) / 10, manualSec: true } : s);
+    return;
   } else return;
   paintA4();
+  if (act === "seq" || act === "origin" || (act === "craft" && draft.craft?.[slot?.at]?.sequential)) {
+    withSlotIndex(draft.slots).forEach((s, n) => { if (s.from === "craft") liveA4(n); });
+    return;
+  }
   liveA4(i);
 }
 
@@ -423,10 +513,7 @@ async function onA4Click(e) {
   const draft = st.a4;
   if (!btn || !draft || btn.tagName !== "BUTTON") return;
   const p = productOf();
-  if (btn.dataset.a4 === "formula") {
-    draft.craft = formulaCraft(p?.step_detail);
-  } else if (btn.dataset.a4 === "reshuffle") {
-    draft.craft = formulaCraft(p?.step_detail, true);
+  if (btn.dataset.a4 === "reshuffle") {
     const pool = st.huyk.map((h) => h.name);
     const pick = () => pool.length ? pool.splice(Math.floor(Math.random() * pool.length), 1)[0] : "";
     draft.huyk = [0, 1].map((at) => { const name = pick(); return name ? { name, path: name, at } : draft.huyk?.[at]; });
@@ -434,11 +521,16 @@ async function onA4Click(e) {
     const slot = withSlotIndex(draft.slots)[Number(btn.dataset.i)];
     if (!slot) return;
     if (slot.from === "craft") {
-      const group = A4_FORMULA.find((g) => g.includes(draft.craft?.[slot.at]?.step)) || (p?.step_detail || []).map((s) => s.step);
-      const choices = group.filter((id) => id !== draft.craft?.[slot.at]?.step && (p?.step_detail || []).some((s) => s.step === id));
-      const id = choices[Math.floor(Math.random() * choices.length)];
-      const step = (p?.step_detail || []).find((s) => s.step === id);
-      if (step) draft.craft[slot.at] = { step: step.step, name: step.label, at: slot.at };
+      const origin = draft.craftOrigin;
+      const seq = !!draft.craft?.[slot.at]?.sequential;
+      const ordered = (seq && origin && originLists(p)[origin]) || orderedCraftSteps(p?.step_detail);
+      const cur = draft.craft?.[slot.at]?.step;
+      const idx = ordered.findIndex((s) => s.step === cur);
+      const step = ordered[(idx + 1) % ordered.length] || ordered[0];
+      if (step) {
+        draft.craft[slot.at] = { ...(draft.craft[slot.at] || {}), step: step.step, name: step.label, at: slot.at };
+        if (seq) applyCraftChain(draft, p, slot.at);
+      }
     } else if (slot.from === "huyk") {
       const used = new Set((draft.huyk || []).map((h) => h?.name));
       const free = st.huyk.filter((h) => h.name !== draft.huyk?.[slot.at]?.name && !used.has(h.name));
@@ -447,7 +539,9 @@ async function onA4Click(e) {
       if (item) draft.huyk[slot.at] = { name: item.name, path: item.name, at: slot.at };
     }
     paintA4();
-    liveA4(Number(btn.dataset.i));
+    if (slot.from === "craft" && draft.craft?.[slot.at]?.sequential) {
+      withSlotIndex(draft.slots).forEach((s, n) => { if (s.from === "craft") liveA4(n); });
+    } else liveA4(Number(btn.dataset.i));
     return;
   }
   paintA4();
@@ -458,24 +552,45 @@ async function onA4Click(e) {
   }
 }
 
+function sortStepRows(rows) {
+  return rows.sort((a, b) => {
+    const ia = Number.isFinite(a.idx) ? a.idx : 999;
+    const ib = Number.isFinite(b.idx) ? b.idx : 999;
+    return ia - ib;
+  });
+}
+
 function metaFromClips(clips) {
   const by = new Map();
+  const origins = {};
   let finalClips = 0;
   let heroClips = 0;
   for (const c of clips || []) {
     const step = c.craft_step;
-    if (step) {
-      const row = by.get(step) || { step, label: c.step_label || step, clips: 0 };
+    if (step && step !== "hoan_thien" && step !== "__unsorted") {
+      const row = by.get(step) || { step, label: c.step_label || step, clips: 0, idx: Number.POSITIVE_INFINITY };
       row.clips += 1;
       if (c.step_label) row.label = c.step_label;
+      const idx = Number(c.step_index);
+      if (Number.isFinite(idx) && idx < row.idx) row.idx = idx;
       by.set(step, row);
+      const origin = c.craft_origin || "legacy";
+      const omap = origins[origin] || (origins[origin] = new Map());
+      const orow = omap.get(step) || { step, label: row.label, clips: 0, idx: Number.POSITIVE_INFINITY };
+      orow.clips += 1;
+      if (c.step_label) orow.label = c.step_label;
+      if (Number.isFinite(idx) && idx < orow.idx) orow.idx = idx;
+      omap.set(step, orow);
     }
     if (c.craft_step === "hoan_thien" || (c.roles?.product_final || 0) >= 0.5) finalClips += 1;
     if ((c.roles?.product_hero || 0) >= 0.5) heroClips += 1;
   }
-  const step_detail = [...by.values()];
+  const step_detail = sortStepRows([...by.values()]);
+  const origin_detail = {};
+  for (const [o, map] of Object.entries(origins)) origin_detail[o] = sortStepRows([...map.values()]);
   return {
     step_detail,
+    origin_detail,
     step_labels: step_detail.map((x) => x.label),
     steps: step_detail.map((x) => x.step),
     has_final: finalClips > 0,

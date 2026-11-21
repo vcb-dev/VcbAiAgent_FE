@@ -35,13 +35,18 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .stat { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 4px 0; font-size: 12px; }
 #a4-route .sec-title { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
 .a4-slot { border-bottom: 1px dashed var(--line); padding: 8px 0; }
-.a4-slot-head { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 8px; font-size: 12px; }
+.a4-slot-head { display: grid; grid-template-columns: max-content 4.4rem minmax(0, 1fr); align-items: center; gap: 8px; font-size: 12px; }
+.a4-sec { width: 4.4rem; min-width: 4.4rem; padding: 6px 4px; font: 12px var(--mono); text-align: right; background: var(--pane-2); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); }
+.a4-sec:disabled { opacity: .65; }
 .a4-slot-head .slot-src { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .a4-kind { width: max-content; max-width: none; font-weight: 600; cursor: pointer; background: var(--pane-2); white-space: nowrap; }
 .a4-slot-head .slot-src select { flex: 1 1 auto; width: 0; min-width: 0; max-width: none; }
 .a4-slot-head b { min-width: 0; font-size: 12px; font-weight: 600; text-align: right; }
 .a4-slot-head .small-btn { flex: 0 0 auto; padding: 6px 8px; }
 .a4-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.a4-slot-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+.a4-seq { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.a4-origin { width: max-content; max-width: 100%; }
 .stat b { font-family: var(--mono); font-weight: 600; }
 
 /* footage / alternative cards */

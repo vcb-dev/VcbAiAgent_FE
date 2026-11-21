@@ -42,12 +42,6 @@ const A4_KINDS = [
   { key: "product:final", from: "product", variant: "final", role: "Sản phẩm hoàn thiện", seconds: 8 },
   { key: "outro", from: "outro", role: "Outro", seconds: 4 },
 ];
-const A4_FORMULA = [
-  ["thiet_ke", "chuan_bi_nguyen_lieu", "nung_nau"],
-  ["do_khuon", "dap_can", "tao_dang", "cua_cat"],
-  ["han", "dua_mai", "khoan", "gan_da_chu"],
-  ["dinh_da", "lam_sach", "danh_bong", "khac_laser", "hoan_thien"],
-];
 const CRAFT_STEPS_DEFAULT = [
   { step: "thiet_ke", label: "Thiết kế / phác thảo" },
   { step: "chuan_bi_nguyen_lieu", label: "Chuẩn bị nguyên liệu" },
@@ -89,34 +83,13 @@ function withSlotIndex(slots) {
   });
 }
 
-function spreadCraft(allSteps) {
+function formulaCraft(allSteps, randomize, slots) {
   const ordered = (allSteps || []).filter((s) => s.step && s.step !== "hoan_thien");
-  const count = Math.min(4, ordered.length);
-  if (count <= 1) return ordered.slice(0, count).map((s, at) => ({ step: s.step, name: s.label, at }));
-  const picks = [];
-  let last = -1;
-  for (let i = 0; i < count; i++) {
-    let idx = Math.round(i * (ordered.length - 1) / (count - 1));
-    if (idx <= last) idx = last + 1;
-    if (idx >= ordered.length) break;
-    last = idx;
-    const s = ordered[idx];
-    picks.push({ step: s.step, name: s.label, at: picks.length });
-  }
-  return picks;
-}
-
-function formulaCraft(allSteps, randomize) {
-  if (!randomize) return spreadCraft(allSteps);
-  const have = new Map((allSteps || []).map((s) => [s.step, s]));
-  const used = new Set();
-  return A4_FORMULA.map((group, at) => {
-    const choices = group.filter((id) => have.has(id) && !used.has(id));
-    if (!choices.length) return null;
-    const id = choices[Math.floor(Math.random() * choices.length)];
-    used.add(id);
-    return { step: id, name: have.get(id).label, at };
-  }).filter(Boolean).map((row, at) => ({ ...row, at }));
+  const n = Math.min(withSlotIndex(slots || A4_SLOTS).filter((s) => s.from === "craft").length || 4, ordered.length);
+  if (!n) return [];
+  let start = 0;
+  if (randomize && ordered.length > n) start = Math.floor(Math.random() * (ordered.length - n + 1));
+  return ordered.slice(start, start + n).map((s, at) => ({ step: s.step, name: s.label, at }));
 }
 
 let a4Draft = null;
@@ -216,11 +189,11 @@ function renderA4Route(auto, visible = true) {
           Footage theo tuyến A4 (công đoạn chế tác)
         </label>
         <span class="a4-tools" style="display:flex;gap:6px">
-          <button class="btn sm" type="button" id="a4-formula-btn" title="Xếp 4 ô chế tác từ đầu tới cuối quy trình">Theo thứ tự công đoạn</button>
-          <button class="btn sm" type="button" id="a4-shuffle-btn" title="Bốc lại ngẫu nhiên các công đoạn trong từng nhóm">↻ Đổi ngẫu nhiên</button>
+          <button class="btn sm" type="button" id="a4-formula-btn" title="Bốc lần lượt công đoạn theo kho của mã">Theo thứ tự công đoạn</button>
+          <button class="btn sm" type="button" id="a4-shuffle-btn" title="Bốc cửa sổ công đoạn khác trong kho">↻ Đổi ngẫu nhiên</button>
         </span>
       </div>
-      <p class="muted small" style="margin:0">Khóa thứ tự các ô cảnh cho video A4 (Sản phẩm ➔ HuyK ➔ Các công đoạn chế tác ➔ Thành phẩm). Outro + logo chỉ ghép khi tick tiếng Việt ở “Ngôn ngữ xuất video”; các tiếng khác bỏ outro và không hiện logo. "Theo thứ tự công đoạn" xếp từ đầu tới cuối quy trình, không nhảy lùi.</p>
+      <p class="muted small" style="margin:0">Khóa thứ tự các ô cảnh cho video A4. “Theo thứ tự công đoạn” bốc lần lượt theo kho HuyK chế tác / thợ xưởng của mã. Outro + logo chỉ ghép khi tick tiếng Việt.</p>
       <div id="a4-slots-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;padding-right:4px">
         ${renderA4SlotsHtml(auto)}
       </div>
@@ -621,16 +594,16 @@ export async function render(view, ctx) {
     $("#a4-formula-btn")?.addEventListener("click", () => {
       const allSteps = (auto.craft_steps && auto.craft_steps.length) ? auto.craft_steps : CRAFT_STEPS_DEFAULT;
       if (a4Draft) {
-        a4Draft.craft = formulaCraft(allSteps, false);
+        a4Draft.craft = formulaCraft(allSteps, false, a4Draft.slots);
         refreshA4Slots();
-        toast("Đã xếp công đoạn theo thứ tự quy trình");
+        toast("Đã xếp công đoạn lần lượt theo kho");
       }
     });
 
     $("#a4-shuffle-btn")?.addEventListener("click", () => {
       const allSteps = (auto.craft_steps && auto.craft_steps.length) ? auto.craft_steps : CRAFT_STEPS_DEFAULT;
       if (a4Draft) {
-        a4Draft.craft = formulaCraft(allSteps, true);
+        a4Draft.craft = formulaCraft(allSteps, true, a4Draft.slots);
         refreshA4Slots();
         toast("Đã đổi tổ hợp công đoạn ngẫu nhiên");
       }
@@ -678,11 +651,11 @@ export async function render(view, ctx) {
       const slot = slots[i];
       const allSteps = (auto.craft_steps && auto.craft_steps.length) ? auto.craft_steps : CRAFT_STEPS_DEFAULT;
       if (slot?.from === "craft") {
+        const ordered = (allSteps || []).filter((s) => s.step && s.step !== "hoan_thien");
         const curStep = a4Draft.craft?.[slot.at]?.step;
-        const group = A4_FORMULA.find((g) => g.includes(curStep)) || allSteps.map((s) => s.step);
-        const choices = group.filter((id) => id !== curStep);
-        const pickId = choices[Math.floor(Math.random() * choices.length)] || curStep;
-        const stepObj = allSteps.find((s) => s.step === pickId);
+        const idx = ordered.findIndex((s) => s.step === curStep);
+        const stepObj = ordered[(idx + 1) % ordered.length] || ordered[0];
+        const pickId = stepObj?.step || curStep;
         a4Draft.craft = a4Draft.craft || [];
         a4Draft.craft[slot.at] = { step: pickId, name: stepObj?.label || pickId, at: slot.at };
         refreshA4Slots();

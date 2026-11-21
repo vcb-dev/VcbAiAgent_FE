@@ -104,7 +104,7 @@ export const actions = {
   emotion: (partId, emotion) => run("Đang đọc lại giọng HuyK với cảm xúc mới", () => api.emotion(store.job.id, partId, emotion)),
   settings: (partial) => run(partial.voice ? "Đang đổi giọng đọc" : "Đang áp dụng tùy chọn", () => api.settings(store.job.id, partial)),
   undo: () => run("Đang hoàn tác", () => api.undo(store.job.id)),
-  source: (partId, role, craftStep, huykAction) => run("Đang đổi cảnh source", () => api.setSource(store.job.id, partId, { role, craft_step: craftStep || null, huyk_action: huykAction || null })),
+  source: (partId, role, craftStep, huykAction, craftOrigin) => run("Đang đổi cảnh source", () => api.setSource(store.job.id, partId, { role, craft_step: craftStep || null, huyk_action: huykAction || null, craft_origin: craftOrigin || null })),
   renderHd: () => run("Đang render bản HD 720×1280", () => api.renderHd(store.job.id)),
   split: (partId, shotIndex) => run("Đang tách shot", () => api.split(store.job.id, { part_id: partId, shot_index: shotIndex })),
   deleteShot: (partId, shotIndex) => run("Đang xoá shot", () => api.deleteShot(store.job.id, { part_id: partId, shot_index: shotIndex })),
