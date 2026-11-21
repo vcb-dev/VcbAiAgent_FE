@@ -303,6 +303,13 @@ function originKeys(p) {
   return keys.length ? keys : Object.keys(lists);
 }
 
+function pickCraftOrigin(p) {
+  const keys = originKeys(p);
+  if (!keys.length) return null;
+  if (keys.length === 1) return keys[0];
+  return keys[Math.floor(Math.random() * keys.length)];
+}
+
 function applyCraftChain(draft, p, fromAt) {
   if (!draft) return;
   const origin = draft.craftOrigin;
@@ -328,8 +335,7 @@ function enableCraftSeq(draft, p, at, on) {
     applyCraftChain(draft, p);
     return;
   }
-  const keys = originKeys(p);
-  if (!draft.craftOrigin && keys.length === 1) draft.craftOrigin = keys[0];
+  draft.craftOrigin = pickCraftOrigin(p);
   withSlotIndex(draft.slots).filter((s) => s.from === "craft").forEach((s) => {
     draft.craft[s.at] = { ...(draft.craft[s.at] || { at: s.at }), at: s.at, sequential: true, origin: draft.craftOrigin || null };
   });
@@ -417,7 +423,7 @@ function paintA4() {
   const steps = p.step_detail || [];
   const name = (p.name || p.sku).replace(/-/g, " ");
   root.innerHTML = `<div class="sec-title"><span>Footage theo tuyến A4</span></div>
-    <div class="hint">Trong dropdown Chế tác chọn “Theo thứ tự công đoạn” rồi kho HuyK chế tác hoặc Thợ xưởng — các ô sau lấy bước liền kề. Ô HuyK bốc ngẫu nhiên. Hoàn thiện cố định ${FINAL_SEC}s; ô khác chia đều theo voice.</div>
+    <div class="hint">Dropdown Chế tác: chọn “Theo thứ tự công đoạn” — hệ thống tự chọn kho HuyK chế tác hoặc Thợ xưởng rồi lấy hết source trong kho đó, các ô liền kề. Ô HuyK bốc ngẫu nhiên. Hoàn thiện cố định ${FINAL_SEC}s.</div>
     ${slots.map((s, i) => {
       if (s.from === "outro" && st.lang !== "vi") return "";
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
@@ -435,16 +441,13 @@ function paintA4() {
         const origin = draft.craftOrigin || current?.origin || "";
         const seqCraft = withSlotIndex(draft.slots).filter((x) => x.from === "craft" && draft.craft?.[x.at]?.sequential);
         const chainHead = seqCraft[0]?.at === s.at;
-        const seqOpts = originKeys(p).map((k) => `<option value="seq:${esc(k)}" ${seqOn && origin === k ? "selected" : ""}>${esc(ORIGIN_LABEL[k] || k)}</option>`).join("");
         const extra = !seqOn && current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
-        const stepHint = seqOn && current?.name ? `<span class="muted"> · ${esc(current.name)}</span>` : "";
+        const seqHint = seqOn ? `<span class="muted"> · ${esc(ORIGIN_LABEL[origin] || origin || "tự chọn kho")}${current?.name ? ` · ${esc(current.name)}` : ""}</span>` : "";
         src = `<span class="slot-src"><select data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}" ${seqOn && !chainHead ? "disabled" : ""}>
-            <optgroup label="Theo thứ tự công đoạn">${seqOpts || `<option value="" disabled>Chưa có kho</option>`}</optgroup>
-            <optgroup label="Chọn công đoạn">
-              ${seqOn ? "" : (current?.step ? "" : `<option value="">— chọn công đoạn —</option>`)}${extra}
-              ${steps.map((st) => `<option value="${esc(st.step)}" ${!seqOn && current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
-            </optgroup>
-          </select>${stepHint}<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn" ${seqOn && !chainHead ? "disabled" : ""}>↻</button></span>`;
+            <option value="seq" ${seqOn ? "selected" : ""}>Theo thứ tự công đoạn</option>
+            ${seqOn ? "" : (current?.step ? "" : `<option value="">— chọn công đoạn —</option>`)}${extra}
+            ${steps.map((st) => `<option value="${esc(st.step)}" ${!seqOn && current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
+          </select>${seqHint}<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn" ${seqOn && !chainHead ? "disabled" : ""}>↻</button></span>`;
       } else if (s.from === "huyk") {
         src = `<b>HuyK · ngẫu nhiên</b>`;
       }
@@ -473,8 +476,7 @@ function onA4Change(e) {
   } else if (act === "craft" && slot?.from === "craft" && e.target.value) {
     const p = productOf();
     const val = e.target.value;
-    if (val.startsWith("seq:")) {
-      draft.craftOrigin = val.slice(4);
+    if (val === "seq") {
       enableCraftSeq(draft, p, slot.at, true);
     } else {
       const step = (p?.step_detail || []).find((s) => s.step === val);
@@ -488,7 +490,7 @@ function onA4Change(e) {
     return;
   } else return;
   paintA4();
-  if (act === "craft" && (e.target.value.startsWith("seq:") || draft.craft?.[slot?.at]?.sequential === false)) {
+  if (act === "craft") {
     withSlotIndex(draft.slots).forEach((s, n) => { if (s.from === "craft") liveA4(n); });
     return;
   }
@@ -602,6 +604,10 @@ async function fillProductMeta(sku) {
     store.boot._libSku = sku;
     const p = productOf();
     if (p && (clips || []).length) Object.assign(p, metaFromClips(clips || []));
+    if (st.a4?.sku === sku && (st.a4.craft || []).some((c) => c?.sequential)) {
+      if (!st.a4.craftOrigin || !originLists(p)[st.a4.craftOrigin]) enableCraftSeq(st.a4, p, 0, true);
+      else applyCraftChain(st.a4, p);
+    }
     paintProductHint();
     paintA4();
   } catch {
