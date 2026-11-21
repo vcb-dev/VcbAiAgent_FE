@@ -368,8 +368,7 @@ function ensureA4() {
     applySlotSeconds(st.a4);
     return st.a4;
   }
-  const huyk = st.huyk.slice(0, 2).map((h, at) => ({ name: h.name, path: h.name, at }));
-  st.a4 = { sku: p.sku, slots: A4_SLOTS.map((s) => ({ ...s })), craft: formulaCraft(p.step_detail, false, A4_SLOTS), huyk };
+  st.a4 = { sku: p.sku, slots: A4_SLOTS.map((s) => ({ ...s })), craft: formulaCraft(p.step_detail, false, A4_SLOTS), huyk: [] };
   applySlotSeconds(st.a4, true);
   return st.a4;
 }
@@ -389,9 +388,8 @@ async function liveA4(index) {
   const part = job.parts[index];
   if (!slot || !part || store.busy) return;
   const craft = slot.from === "craft" ? draft.craft?.[slot.at]?.step : null;
-  const huyk = slot.from === "huyk" ? draft.huyk?.[slot.at]?.name : null;
   const origin = slot.from === "craft" ? (draft.craft?.[slot.at]?.origin || draft.craftOrigin) : null;
-  return actions.source(part.part_id, a4Role(slot), craft, huyk, origin);
+  return actions.source(part.part_id, a4Role(slot), craft, null, origin);
 }
 
 function a4Payload() {
@@ -401,7 +399,7 @@ function a4Payload() {
   return {
     slots: slots.map((s) => ({ kind: s.from, variant: s.variant || null, seconds: s.seconds, at: s.at ?? null })),
     craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || draft.craftOrigin || null, sequential: !!c.sequential })),
-    huyk: (draft.huyk || []).filter(Boolean).map((h) => ({ name: h.name, path: h.path || h.name, at: h.at })),
+    huyk: [],
     craft_origin: draft.craftOrigin || null,
   };
 }
@@ -418,9 +416,8 @@ function paintA4() {
   const slots = withSlotIndex(draft.slots);
   const steps = p.step_detail || [];
   const name = (p.name || p.sku).replace(/-/g, " ");
-  root.innerHTML = `<div class="sec-title"><span>Footage theo tuyến A4</span><span class="a4-tools">
-      <button class="small-btn" type="button" data-a4="reshuffle" title="Bốc cảnh HuyK khác">↻ đổi cảnh HuyK</button></span></div>
-    <div class="hint">Tick “Theo thứ tự công đoạn” trên ô Chế tác rồi chọn kho HuyK chế tác hoặc Thợ xưởng. Các ô chế tác cùng kho sẽ lấy bước liền kề. Hoàn thiện cố định ${FINAL_SEC}s; ô khác chia đều theo voice.</div>
+  root.innerHTML = `<div class="sec-title"><span>Footage theo tuyến A4</span></div>
+    <div class="hint">Trong dropdown Chế tác chọn “Theo thứ tự công đoạn” rồi kho HuyK chế tác hoặc Thợ xưởng — các ô sau lấy bước liền kề. Ô HuyK bốc ngẫu nhiên. Hoàn thiện cố định ${FINAL_SEC}s; ô khác chia đều theo voice.</div>
     ${slots.map((s, i) => {
       if (s.from === "outro" && st.lang !== "vi") return "";
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
@@ -428,7 +425,6 @@ function paintA4() {
       const kindOpts = kinds.map((k) => `<option value="${k.key}" ${a4Key(s) === k.key ? "selected" : ""}>${esc(s.from === "craft" && k.key === "craft" ? s.role : k.role)}</option>`).join("");
       const secLocked = isFinalSlot(s);
       const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${Number(s.seconds) || 1}" ${secLocked ? "disabled" : ""} title="${secLocked ? `Hoàn thiện cố định ${FINAL_SEC}s` : "Giây công đoạn"}" aria-label="Giây ô ${i + 1}">`;
-      let extraRow = "";
       let src = `<b>${esc(s.from === "product" ? name : "kho outro · chỉ tiếng Việt")}</b>`;
       if (s.from === "product") {
         const n = s.variant === "final" ? (p.final_clips || 0) : (p.hero_clips || 0);
@@ -437,27 +433,22 @@ function paintA4() {
       if (s.from === "craft") {
         const seqOn = !!current?.sequential;
         const origin = draft.craftOrigin || current?.origin || "";
-        const lists = originLists(p);
-        const stepPool = (seqOn && origin && lists[origin]) ? lists[origin] : steps;
-        const extra = current?.step && !stepPool.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
         const seqCraft = withSlotIndex(draft.slots).filter((x) => x.from === "craft" && draft.craft?.[x.at]?.sequential);
         const chainHead = seqCraft[0]?.at === s.at;
-        const originOpts = originKeys(p).map((k) => `<option value="${esc(k)}" ${origin === k ? "selected" : ""}>${esc(ORIGIN_LABEL[k] || k)}</option>`).join("");
+        const seqOpts = originKeys(p).map((k) => `<option value="seq:${esc(k)}" ${seqOn && origin === k ? "selected" : ""}>${esc(ORIGIN_LABEL[k] || k)}</option>`).join("");
+        const extra = !seqOn && current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
+        const stepHint = seqOn && current?.name ? `<span class="muted"> · ${esc(current.name)}</span>` : "";
         src = `<span class="slot-src"><select data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}" ${seqOn && !chainHead ? "disabled" : ""}>
-            ${current?.step ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
-            ${stepPool.map((st) => `<option value="${esc(st.step)}" ${current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
-          </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn" ${seqOn && !chainHead ? "disabled" : ""}>↻</button></span>`;
-        extraRow = `<div class="a4-slot-extra"><label class="a4-seq"><input type="checkbox" data-a4="seq" data-i="${i}" ${seqOn ? "checked" : ""}>Theo thứ tự công đoạn</label>
-          ${seqOn ? `<select class="a4-origin" data-a4="origin" data-i="${i}" aria-label="Kho chế tác">${origin ? "" : `<option value="">— chọn kho —</option>`}${originOpts}</select>` : ""}</div>`;
+            <optgroup label="Theo thứ tự công đoạn">${seqOpts || `<option value="" disabled>Chưa có kho</option>`}</optgroup>
+            <optgroup label="Chọn công đoạn">
+              ${seqOn ? "" : (current?.step ? "" : `<option value="">— chọn công đoạn —</option>`)}${extra}
+              ${steps.map((st) => `<option value="${esc(st.step)}" ${!seqOn && current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
+            </optgroup>
+          </select>${stepHint}<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn" ${seqOn && !chainHead ? "disabled" : ""}>↻</button></span>`;
       } else if (s.from === "huyk") {
-        const known = st.huyk.some((h) => h.name === current?.name);
-        src = `<span class="slot-src"><select data-a4="huyk" data-i="${i}" aria-label="Cảnh HuyK">
-            ${current?.name ? "" : `<option value="">— chọn cảnh HuyK —</option>`}
-            ${current?.name && !known ? `<option value="${esc(current.name)}">${esc(current.name)}</option>` : ""}
-            ${st.huyk.map((h) => `<option value="${esc(h.name)}" ${current?.name === h.name ? "selected" : ""}>${esc(h.label)} · ${h.clips}</option>`).join("")}
-          </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Bốc cảnh HuyK khác">↻</button></span>`;
+        src = `<b>HuyK · ngẫu nhiên</b>`;
       }
-      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}" aria-label="Loại ô ${i + 1}">${kindOpts}</select>${secBox}${src}</div>${extraRow}</div>`;
+      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}" aria-label="Loại ô ${i + 1}">${kindOpts}</select>${secBox}${src}</div></div>`;
     }).join("")}
     ${steps.length ? "" : `<div class="hint">Mã ${esc(p.sku)} chưa có công đoạn chế tác trong catalog.</div>`}`;
 }
@@ -479,21 +470,17 @@ function onA4Change(e) {
       const step = (productOf()?.step_detail || [])[0];
       if (step) draft.craft[next.at] = { step: step.step, name: step.label, at: next.at };
     }
-    if (next.from === "huyk" && !draft.huyk?.[next.at] && st.huyk[0]) draft.huyk[next.at] = { name: st.huyk[0].name, path: st.huyk[0].name, at: next.at };
-  } else if (act === "seq" && slot?.from === "craft") {
-    enableCraftSeq(draft, productOf(), slot.at, e.target.checked);
-  } else if (act === "origin" && slot?.from === "craft" && e.target.value) {
-    draft.craftOrigin = e.target.value;
-    enableCraftSeq(draft, productOf(), slot.at, true);
   } else if (act === "craft" && slot?.from === "craft" && e.target.value) {
     const p = productOf();
-    const origin = draft.craftOrigin;
-    const pool = (draft.craft?.[slot.at]?.sequential && origin && originLists(p)[origin]) || p?.step_detail || [];
-    const step = pool.find((s) => s.step === e.target.value);
-    draft.craft[slot.at] = { ...(draft.craft[slot.at] || {}), step: e.target.value, name: step?.label || e.target.value, at: slot.at };
-    if (draft.craft[slot.at].sequential) applyCraftChain(draft, p, slot.at);
-  } else if (act === "huyk" && slot?.from === "huyk" && e.target.value) {
-    draft.huyk[slot.at] = { name: e.target.value, path: e.target.value, at: slot.at };
+    const val = e.target.value;
+    if (val.startsWith("seq:")) {
+      draft.craftOrigin = val.slice(4);
+      enableCraftSeq(draft, p, slot.at, true);
+    } else {
+      const step = (p?.step_detail || []).find((s) => s.step === val);
+      enableCraftSeq(draft, p, slot.at, false);
+      draft.craft[slot.at] = { ...(draft.craft[slot.at] || {}), step: val, name: step?.label || val, at: slot.at, sequential: false };
+    }
   } else if (act === "sec" && slot) {
     const sec = Number(e.target.value);
     if (!(sec > 0)) return;
@@ -501,7 +488,7 @@ function onA4Change(e) {
     return;
   } else return;
   paintA4();
-  if (act === "seq" || act === "origin" || (act === "craft" && draft.craft?.[slot?.at]?.sequential)) {
+  if (act === "craft" && (e.target.value.startsWith("seq:") || draft.craft?.[slot?.at]?.sequential === false)) {
     withSlotIndex(draft.slots).forEach((s, n) => { if (s.from === "craft") liveA4(n); });
     return;
   }
@@ -513,11 +500,7 @@ async function onA4Click(e) {
   const draft = st.a4;
   if (!btn || !draft || btn.tagName !== "BUTTON") return;
   const p = productOf();
-  if (btn.dataset.a4 === "reshuffle") {
-    const pool = st.huyk.map((h) => h.name);
-    const pick = () => pool.length ? pool.splice(Math.floor(Math.random() * pool.length), 1)[0] : "";
-    draft.huyk = [0, 1].map((at) => { const name = pick(); return name ? { name, path: name, at } : draft.huyk?.[at]; });
-  } else if (btn.dataset.a4 === "roll") {
+  if (btn.dataset.a4 === "roll") {
     const slot = withSlotIndex(draft.slots)[Number(btn.dataset.i)];
     if (!slot) return;
     if (slot.from === "craft") {
@@ -531,13 +514,7 @@ async function onA4Click(e) {
         draft.craft[slot.at] = { ...(draft.craft[slot.at] || {}), step: step.step, name: step.label, at: slot.at };
         if (seq) applyCraftChain(draft, p, slot.at);
       }
-    } else if (slot.from === "huyk") {
-      const used = new Set((draft.huyk || []).map((h) => h?.name));
-      const free = st.huyk.filter((h) => h.name !== draft.huyk?.[slot.at]?.name && !used.has(h.name));
-      const list = free.length ? free : st.huyk.filter((h) => h.name !== draft.huyk?.[slot.at]?.name);
-      const item = list[Math.floor(Math.random() * list.length)];
-      if (item) draft.huyk[slot.at] = { name: item.name, path: item.name, at: slot.at };
-    }
+    } else return;
     paintA4();
     if (slot.from === "craft" && draft.craft?.[slot.at]?.sequential) {
       withSlotIndex(draft.slots).forEach((s, n) => { if (s.from === "craft") liveA4(n); });
