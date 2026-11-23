@@ -27,6 +27,7 @@ export function scriptForm(boot) {
           ${Object.entries(LANG_NAMES).map(([k]) => `<option value="${k}">${k.toUpperCase()}</option>`).join("")}</select></div>
       <input id="content-search" type="text" placeholder="Tìm trong kho…" aria-label="Tìm kịch bản">
       <div id="content-meta" class="hint"></div>
+      <div id="content-voice-dur" class="hint"></div>
       <textarea id="script-input" rows="7" placeholder="Chọn kịch bản trong kho hoặc dán kịch bản…" aria-label="Lời kịch bản"></textarea></div>
     <div class="step-card">${stepHead(2, "Sản phẩm")}
       <select id="product-select" aria-label="Bộ footage sản phẩm"><option value="">— Không gắn sản phẩm —</option>
@@ -63,6 +64,27 @@ function contentOptions() {
 
 function voiceStale() {
   return st.voice && st.voice.text !== $("script-input").value.trim();
+}
+
+function contentVoiceSeconds() {
+  const lang = st.lang;
+  const live = st.voice && Number(st.voice.duration) > 0 ? Number(st.voice.duration) : 0;
+  const saved = Number(st.content?.voices?.[lang]?.duration) || 0;
+  if (live && !voiceStale()) return live;
+  return live || saved || 0;
+}
+
+function paintContentDur() {
+  const el = $("content-voice-dur");
+  if (!el) return;
+  if (!st.content) { el.textContent = ""; return; }
+  const d = contentVoiceSeconds();
+  const lang = (st.lang || "vi").toUpperCase();
+  if (d > 0) {
+    el.innerHTML = `Thời lượng voice <b>${esc(lang)}</b>: <span class="mono">${fmt(d)}</span> · ${d.toFixed(1)}s`;
+  } else {
+    el.textContent = `Chưa có voice ${lang} cho kịch bản này — tạo ở tab Giọng.`;
+  }
 }
 
 export function voiceStudioHtml() {
@@ -113,6 +135,7 @@ async function refreshVoices() {
 }
 
 function paintVoice() {
+  paintContentDur();
   if (!$("voice-list")) return;
   const c = st.content;
   const ready = Object.entries(c?.voices || {}).filter(([lang, v]) => lang === st.lang && (v.uploaded || !v.text || v.text.trim() === $("script-input").value.trim()));
@@ -186,9 +209,11 @@ function pickContent(id) {
     if (c.sku && store.boot.products.some((p) => p.sku === c.sku)) $("product-select").value = c.sku;
     $("content-meta").innerHTML = `${esc(c.topic)}${c.kind ? ` · dùng chung mọi ${esc(c.kind)}` : ""}`;
     $("content-fam").innerHTML = `<span class="fam ${esc(c.family)}">${esc(c.family)}</span>`;
+    paintContentDur();
   } else {
     $("content-meta").textContent = "";
     $("content-fam").innerHTML = "";
+    paintContentDur();
   }
   if (c && FAM[c.family]) $("aiw-family").value = c.family;
   showSteps();
@@ -423,7 +448,7 @@ function paintA4() {
   const steps = p.step_detail || [];
   const name = (p.name || p.sku).replace(/-/g, " ");
   root.innerHTML = `<div class="sec-title"><span>Footage theo tuyến A4</span></div>
-    <div class="hint">Dropdown Chế tác: chọn “Theo thứ tự công đoạn” — hệ thống tự chọn kho HuyK chế tác hoặc Thợ xưởng rồi lấy hết source trong kho đó, các ô liền kề. Ô HuyK bốc ngẫu nhiên. Hoàn thiện cố định ${FINAL_SEC}s.</div>
+    <div class="hint">Ô Chế tác: chọn “Theo thứ tự công đoạn” trong dropdown (cấu hình logic kho sẽ làm sau). Ô HuyK bốc ngẫu nhiên. Hoàn thiện cố định ${FINAL_SEC}s.</div>
     ${slots.map((s, i) => {
       if (s.from === "outro" && st.lang !== "vi") return "";
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
@@ -438,16 +463,12 @@ function paintA4() {
       }
       if (s.from === "craft") {
         const seqOn = !!current?.sequential;
-        const origin = draft.craftOrigin || current?.origin || "";
-        const seqCraft = withSlotIndex(draft.slots).filter((x) => x.from === "craft" && draft.craft?.[x.at]?.sequential);
-        const chainHead = seqCraft[0]?.at === s.at;
         const extra = !seqOn && current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
-        const seqHint = seqOn ? `<span class="muted"> · ${esc(ORIGIN_LABEL[origin] || origin || "tự chọn kho")}${current?.name ? ` · ${esc(current.name)}` : ""}</span>` : "";
-        src = `<span class="slot-src"><select data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}" ${seqOn && !chainHead ? "disabled" : ""}>
+        src = `<span class="slot-src"><select class="a4-craft-pick" data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}">
             <option value="seq" ${seqOn ? "selected" : ""}>Theo thứ tự công đoạn</option>
-            ${seqOn ? "" : (current?.step ? "" : `<option value="">— chọn công đoạn —</option>`)}${extra}
+            ${current?.step || seqOn ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
             ${steps.map((st) => `<option value="${esc(st.step)}" ${!seqOn && current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
-          </select>${seqHint}<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn" ${seqOn && !chainHead ? "disabled" : ""}>↻</button></span>`;
+          </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn">↻</button></span>`;
       } else if (s.from === "huyk") {
         src = `<b>HuyK · ngẫu nhiên</b>`;
       }

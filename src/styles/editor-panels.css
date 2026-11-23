@@ -40,7 +40,8 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .a4-sec:disabled { opacity: .65; }
 .a4-slot-head .slot-src { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .a4-kind { width: max-content; max-width: none; font-weight: 600; cursor: pointer; background: var(--pane-2); white-space: nowrap; }
-.a4-slot-head .slot-src select { flex: 1 1 auto; width: 0; min-width: 0; max-width: none; }
+.a4-slot-head .slot-src select { flex: 1 1 auto; width: auto; min-width: 0; max-width: none; }
+.a4-slot-head .slot-src select.a4-craft-pick { flex: 1 1 14rem; min-width: 14rem; }
 .a4-slot-head b { min-width: 0; font-size: 12px; font-weight: 600; text-align: right; }
 .a4-slot-head .small-btn { flex: 0 0 auto; padding: 6px 8px; }
 .a4-tools { display: flex; flex-wrap: wrap; gap: 6px; }
