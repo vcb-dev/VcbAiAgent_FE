@@ -1021,6 +1021,10 @@ button.tline { cursor: pointer; } button.tline.on { background: var(--accent-sof
 .tname:hover, .tname:focus { border-color: var(--line); outline: none; }
 .tpl-body { display: flex; flex-direction: column; gap: 10px; }
 .tmeta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .tmeta select { flex: 1; min-width: 180px; } .tlines { display: flex; gap: 4px; }
+.tstep { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.tstep input { width: 72px; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); font: 600 13px var(--mono); text-align: right; }
+.tstep span { font-weight: 500; color: var(--muted); }
+.tstep-note { margin: 4px 0 8px; line-height: 1.45; }
 .tblks { display: flex; flex-direction: column; gap: 6px; }
 .tblk { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--chip-bg); border: 1px solid transparent; }
 .tblk.over { border-color: var(--accent); } .tblk.drag { opacity: .45; }

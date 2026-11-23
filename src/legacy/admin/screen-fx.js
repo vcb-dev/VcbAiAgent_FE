@@ -38,7 +38,7 @@ function defaultSeq(family) {
 function startEdit(info, id) {
   const t = id === "" ? { id: "", label: "", family: "A4", lines: ["A4"], description: "", alt_roles: {}, sequence: defaultSeq("A4") }
     : info.templates.find((x) => x.id === id);
-  draft = t ? JSON.parse(JSON.stringify({ ...t, lines: linesOf(t), sequence: t.sequence || [] })) : null;
+  draft = t ? JSON.parse(JSON.stringify({ ...t, lines: linesOf(t), sequence: t.sequence || [], craft_step_sec: Number(t.craft_step_sec) || 1 })) : null;
 }
 
 function rowHtml(b, i, steps) {
@@ -66,6 +66,10 @@ function tplView(info) {
       <div class="tmeta"><select id="t-fam" class="in" aria-label="Kiểu dựng">${Object.entries(info.families).map(([k, v]) => `<option value="${k}" ${d.family === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
         <span class="tlines">${(info.lines || ["A1", "A2", "A3", "A4", "A5"]).map((l) => `<button type="button" class="tline${d.lines.includes(l) ? " on" : ""}" data-tline="${l}">${l}</button>`).join("")}</span></div>
       ${d.sequence.length ? `${bar(d.sequence)}<div class="small muted">Thời lượng theo lời đọc · clip ngắn thì bốc clip khác trám · kéo ⠿ đổi thứ tự</div>
+        ${d.family === "A4" ? `<label class="tstep">Mỗi công đoạn
+          <input id="t-step-sec" type="number" min="0.5" max="15" step="0.5" value="${Number(d.craft_step_sec) || 1}" aria-label="Giây mỗi công đoạn chế tác">
+          <span>giây</span></label>
+          <p class="small muted tstep-note">Ô chế tác theo thứ tự: số giây của ô ÷ số này = số công đoạn. Ví dụ ô 3s, mỗi công đoạn 1s → đổ bạc, nung, đổ khuôn, mỗi đoạn 1s.</p>` : ""}
         <div class="tblks" id="tblks">${d.sequence.map((b, i) => rowHtml(b, i, steps)).join("")}</div>`
       : `<div class="empty" style="padding:18px">Template này để AI tự xếp cảnh theo kịch bản.<br><br><button class="btn sm" type="button" data-tseq>Tự xếp trình tự cảnh</button></div>`}
       ${d.sequence.length ? `<div class="tadd"><span class="small muted">Thêm khối</span>${Object.entries(BLK).map(([k, [l, c]]) => `<button type="button" class="tadd-b" data-badd="${k}"><span class="tdot" style="background:${c}"></span>${l}</button>`).join("")}</div>` : ""}
@@ -143,6 +147,8 @@ export async function render(view, ctx) {
     if (v("#t-label") != null) draft.label = v("#t-label");
     if (v("#t-desc") != null) draft.description = v("#t-desc");
     if (v("#t-alt") != null) draft.alt_roles = parseAlt(v("#t-alt"));
+    const step = Number(v("#t-step-sec"));
+    if (Number.isFinite(step) && step > 0) draft.craft_step_sec = Math.min(15, Math.max(0.5, Math.round(step * 10) / 10));
   };
   const redraw = () => { const sc = el.querySelector(".tpl-body")?.scrollTop || 0; grab(); paint(); const b = el.querySelector(".tpl-body"); if (b) b.scrollTop = sc; };
   const slug = (t) => (t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "tpl") + "_" + Math.random().toString(36).slice(2, 6);
@@ -201,7 +207,7 @@ export async function render(view, ctx) {
         if (oi >= 0 && oi !== draft.sequence.length - 1) { draft.sequence.push(...draft.sequence.splice(oi, 1)); }   // outro always last
         const id = draft.id || slug(draft.label);
         await api.templateSave(id, { label: draft.label.trim(), family: draft.family, description: draft.description || "", alt_roles: draft.alt_roles || {},
-          sequence: draft.sequence, lines: draft.lines });
+          sequence: draft.sequence, lines: draft.lines, craft_step_sec: Number(draft.craft_step_sec) || 1 });
         toast("Đã lưu template"); await reload(); startEdit(info, id); paint();
       } else if (b.dataset.tdel) {
         if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Bấm lần nữa để xoá"; return; }
