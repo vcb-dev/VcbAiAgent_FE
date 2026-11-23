@@ -269,8 +269,6 @@ function scanLabel(lib, src) {
 }
 function catBar(lib) {
   const cs = cats(lib);
-  const allKind = readyRows().length || lib.filter((c) => inLib(c)).length;
-  const b = (k, l, n) => `<button type="button" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="n">${n}</span></button>`;
   const pool = skuBaseRows(lib).filter((r) => !st.cat || (r.category || skuKind(r.sku)) === st.cat);
   const counts = {};
   pool.forEach((r) => { const L = skuLetter(r.sku); counts[L] = (counts[L] || 0) + 1; });
@@ -278,11 +276,16 @@ function catBar(lib) {
   if (counts["#"]) letters.push("#");
   return `<div class="ffilter">
     ${searchField()}
-    <div class="seg" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>
-    <select id="f-letter" class="fletter" aria-label="Lọc A–Z">
-      <option value="">A–Z</option>
-      ${letters.map((L) => `<option value="${esc(L)}" ${st.letter === L ? "selected" : ""}>${esc(L)}</option>`).join("")}
-    </select></div>`;
+    <div class="fpicks">
+      <select id="f-cat" class="fcat" aria-label="Loại sản phẩm">
+        <option value="">Tất cả</option>
+        ${cs.map((c) => `<option value="${esc(c.key)}" ${st.cat === c.key ? "selected" : ""}>${esc(c.label)}</option>`).join("")}
+      </select>
+      <select id="f-letter" class="fletter" aria-label="Lọc A–Z">
+        <option value="">A–Z</option>
+        ${letters.map((L) => `<option value="${esc(L)}" ${st.letter === L ? "selected" : ""}>${esc(L)}</option>`).join("")}
+      </select>
+    </div></div>`;
 }
 function sideList(lib, gs) {
   if (st.lib === "product" && !st.origin) {
@@ -1287,9 +1290,15 @@ export async function render(view, ctx) {
     commitComposer();
   });
   el.addEventListener("change", (e) => {
-    if (e.target.id !== "f-letter") return;
-    st.letter = e.target.value;
-    paintSkuBrowse();
+    if (e.target.id === "f-letter") {
+      st.letter = e.target.value;
+      paintSkuBrowse();
+      return;
+    }
+    if (e.target.id !== "f-cat") return;
+    st.cat = e.target.value;
+    if (st.sku && !skuRows(lib, covRef).some((r) => r.key === st.sku)) st.sku = "";
+    paint();
   });
   el.addEventListener("input", (e) => {
     if (e.target.id === "f-step-name" && st.composer) {
@@ -1342,7 +1351,6 @@ export async function render(view, ctx) {
       });
       return;
     }
-    if (t.dataset.cat !== undefined) { go(() => { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; }); return; }
     if (t.hasAttribute("data-back-origin")) {
       go(() => {
         st.origin = ""; st.step = ""; st.shown = 60; st.composer = null; st.boardErr = "";
