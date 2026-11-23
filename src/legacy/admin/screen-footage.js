@@ -237,7 +237,7 @@ function header(lib, src) {
     return lib.filter((c) => libOf(c) === k).length;
   };
   const busy = src.state === "scanning";
-  const skuBrowse = st.lib === "product" && !st.sku;
+  const skuBrowse = st.lib === "product" && !st.origin;
   return `<header class="ph-bar"><h1>Kho footage</h1>
     <div class="seg" role="tablist" aria-label="Kho">${Object.entries(LIBS).map(([k, v]) => `<button type="button" role="tab" data-lib="${k}" aria-selected="${st.lib === k}">${v} · ${n(k)}</button>`).join("")}</div>
     <div class="sp"></div>
@@ -249,7 +249,7 @@ function header(lib, src) {
     ${skuBrowse ? catBar(lib) : ""}`;
 }
 function searchField() {
-  const skuBrowse = st.lib === "product" && !st.sku;
+  const skuBrowse = st.lib === "product" && !st.origin;
   return `<label class="search${skuBrowse ? " fsearch" : ""}"${skuBrowse ? "" : ' style="width:240px"'}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
       <span class="sr">Tìm footage</span><input id="f-q" type="search" placeholder="${skuBrowse ? "Tìm mã SP" : "Tìm clip, công đoạn"}" value="${esc(st.q)}"></label>`;
 }
@@ -270,21 +270,28 @@ function scanLabel(lib, src) {
 function catBar(lib) {
   const cs = cats(lib);
   const allKind = readyRows().length || lib.filter((c) => inLib(c)).length;
-  const b = (k, l, n) => `<button type="button" class="pill" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="n">${n}</span></button>`;
+  const b = (k, l, n) => `<button type="button" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="n">${n}</span></button>`;
   const pool = skuBaseRows(lib).filter((r) => !st.cat || (r.category || skuKind(r.sku)) === st.cat);
   const counts = {};
   pool.forEach((r) => { const L = skuLetter(r.sku); counts[L] = (counts[L] || 0) + 1; });
   const letters = AZ.filter((L) => counts[L]);
   if (counts["#"]) letters.push("#");
-  return `<div class="fcats">
+  return `<div class="ffilter">
     ${searchField()}
-    <div class="fpills" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>
+    <div class="seg" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>
     <select id="f-letter" class="fletter" aria-label="Lọc A–Z">
       <option value="">A–Z</option>
       ${letters.map((L) => `<option value="${esc(L)}" ${st.letter === L ? "selected" : ""}>${esc(L)}</option>`).join("")}
     </select></div>`;
 }
 function sideList(lib, gs) {
+  if (st.lib === "product" && !st.origin) {
+    const row = (g) => `<button type="button" class="lrow${st.sku === g.key ? " on" : ""}${g.n ? "" : " empty"}" data-sku="${esc(g.key)}">
+      ${listIc(g.thumb)}
+      <span class="bd"><span class="t1"><b class="mono">${esc(g.label)}</b><span class="muted small">${g.n}</span></span>
+        ${g.sub ? `<span class="muted small">${esc(g.sub)}</span>` : ""}</span></button>`;
+    return skuRows(lib, covRef).map(row).join("");
+  }
   if (st.lib === "product" && st.sku && st.origin) {
     const meta = (covRef.rows || []).find((r) => r.sku === st.sku);
     const back = `<button type="button" class="lrow" data-back-origin="1"><span class="ic">${ICON}</span>
@@ -305,19 +312,6 @@ function sideList(lib, gs) {
       <span class="bd"><span class="t1"><b>${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span></span></button>`).join("");
     return `${back}<button type="button" class="lrow${!st.group ? " on" : ""}" ${allKey}><span class="ic">${ICON}</span><span class="bd"><span class="t1"><b>Tất cả clip nguồn này</b></span></span></button>${rows}`;
   }
-  if (st.lib === "product" && st.sku) {
-    const meta = (covRef.rows || []).find((r) => r.sku === st.sku);
-    const back = `<button type="button" class="lrow" data-back-skus="1"><span class="ic">${ICON}</span>
-      <span class="bd"><span class="t1"><b>← Mã sản phẩm</b></span><span class="muted small">Chọn mã khác</span></span></button>
-      <div class="lrow on" style="pointer-events:none"><span class="ic"></span>
-        <span class="bd"><span class="t1"><b class="mono">${esc(st.sku)}</b></span>
-          <span class="muted small">${esc(meta?.name || "")}</span></span></div>`;
-    const rows = gs.map((g) => `<button type="button" class="lrow${g.n ? "" : " empty"}" data-origin="${esc(g.key)}">
-      ${listIc(g.thumb)}
-      <span class="bd"><span class="t1"><b>${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
-        <span class="muted small">${esc(g.sub || "")}</span></span></button>`).join("");
-    return `${back}${rows}`;
-  }
   const row = (g) => `<button type="button" class="lrow${(st.lib === "product" ? st.sku : st.group) === g.key ? " on" : ""}${g.n ? "" : " empty"}" data-${st.lib === "product" ? "sku" : "group"}="${esc(g.key)}">
     ${listIc(g.thumb)}
     <span class="bd"><span class="t1"><b class="${st.lib === "product" ? "mono" : ""}">${esc(g.label)}</b><span class="muted small">${g.n} clip</span></span>
@@ -326,22 +320,18 @@ function sideList(lib, gs) {
   return `${all}${gs.map(row).join("")}`;
 }
 function mainHead(lib, gs) {
-  if (st.lib === "product" && !st.sku) {
-    return `<div><h2 style="margin:0;font-size:18px;font-weight:700">Chọn một mã sản phẩm</h2>
-      <p class="muted" style="margin:8px 0 0">Bấm mã → xem hết source của mã đó: chế tác HuyK, thợ, SP hoàn thiện, HuyK, outro.</p></div>`;
-  }
+  if (st.lib === "product" && !st.sku) return "";
   if (st.lib === "product" && st.sku && !st.origin) {
     const meta = (covRef.rows || []).find((r) => r.sku === st.sku);
-    return `<div><h2 style="margin:0;font-size:18px;font-weight:700;font-family:var(--mono)">${esc(st.sku)}</h2>
-      <p class="muted" style="margin:8px 0 0">${esc(meta?.name || "")} · Mọi nguồn dùng khi dựng video mã này.</p></div>`;
+    return `<div class="fhead"><div class="fhead-t"><h2 class="mono">${esc(st.sku)}</h2>
+      <p>${esc(meta?.name || "Chọn nguồn footage cho mã này")}</p></div></div>`;
   }
   const g = st.lib === "product" ? gs.find((x) => x.key === st.step) : gs.find((x) => x.key === st.group);
   const meta = (covRef.rows || []).find((r) => r.sku === st.sku);
   if (canSort()) {
-    return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <button type="button" class="btn" data-back-origin="1">← Nguồn</button>
-      <h2 style="margin:0;font-size:18px;font-weight:700;font-family:var(--mono)">${esc(st.sku)}</h2>
-      <span class="muted">${esc(meta?.name || "")}${meta?.name ? " · " : ""}${esc(originLabel(st.origin))}</span></div>`;
+    return `<div class="fhead"><button type="button" class="btn sm" data-back-origin="1">← Nguồn</button>
+      <div class="fhead-t"><h2 class="mono">${esc(st.sku)}</h2>
+      <p>${esc([meta?.name, originLabel(st.origin)].filter(Boolean).join(" · "))}</p></div></div>`;
   }
   const title = st.lib === "product" ? `${st.sku} · ${originLabel(st.origin)}` : (g ? g.label : `Tất cả ${LIBS[st.lib]}`);
   const sub = st.lib === "product" ? (st.step ? (STEP_VI[st.step] || "Chưa xếp") : (meta?.name || "")) : (g?.sub || "");
@@ -350,10 +340,11 @@ function mainHead(lib, gs) {
     chips = ["Thị trường Việt Nam", "Voice tiếng Việt", "Dọc 1080×1920", st.group === "huyk" || !st.group ? "Tự ghép cuối mọi video" : "Chọn tay trong Studio"]
       .map((x) => `<span class="stepchip on"><span class="dot ok"></span>${x}</span>`).join("");
   }
-  return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <h2 style="margin:0;font-size:18px;font-weight:700;${st.lib === "product" ? "font-family:var(--mono)" : ""}">${esc(title)}</h2>
-      <span class="muted">${clipsOf(lib).length} clip${sub ? " · " + esc(sub) : ""}</span></div>
-    ${chips ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>` : ""}`;
+  const back = st.lib === "product" && st.origin
+    ? `<button type="button" class="btn sm" data-back-origin="1">← Nguồn</button>` : "";
+  return `<div class="fhead">${back}<div class="fhead-t"><h2${st.lib === "product" ? ' class="mono"' : ""}>${esc(title)}</h2>
+      <p>${clipsOf(lib).length} clip${sub ? " · " + esc(sub) : ""}</p></div></div>
+    ${chips ? `<div class="fchips">${chips}</div>` : ""}`;
 }
 let usage = {};
 const PAGE = 60;
@@ -391,11 +382,11 @@ function skuCard(g) {
         <span class="skun">${g.n} clip</span></span></button>`;
 }
 function originCard(g) {
-  return `<button type="button" class="skucard${g.thumb ? "" : " no-ph"}" data-origin="${esc(g.key)}">
-      <span class="tmb">${skuPh(g.thumb)}<span class="tc">${g.n} clip</span></span>
-      <span class="skumeta"><b>${esc(g.label)}</b>
+  return `<button type="button" class="fsrc${g.n ? "" : " empty"}" data-origin="${esc(g.key)}">
+      <span class="fsrc-ph">${skuPh(g.thumb)}</span>
+      <span class="fsrc-bd"><b>${esc(g.label)}</b>
         <span class="muted small">${esc(g.sub || "")}</span>
-        <span class="skun">${g.n} clip</span></span></button>`;
+        <span class="n">${g.n} clip</span></span></button>`;
 }
 function boardClips(lib) {
   let list = skuClips(lib);
@@ -563,9 +554,9 @@ function grid(lib) {
       return `<div class="empty is-busy">Đang tải kho footage…</div>`;
     }
     if (st.q.trim() && !skuRows(lib, covRef).length) {
-      return `<div class="empty">Không có mã khớp. Đổi loại hoặc ô tìm.</div>`;
+      return `<div class="fempty"><b>Không có mã khớp</b><p>Đổi loại, chữ cái hoặc từ khóa tìm.</p></div>`;
     }
-    return `<div class="empty">Bấm một mã ở cột trái để xem clip chế tác, HuyK, thợ, hoàn thiện và outro.</div>`;
+    return `<div class="fempty"><b>Chọn mã sản phẩm</b><p>Bấm một mã bên trái để xem clip chế tác, HuyK, thợ, hoàn thiện và outro.</p></div>`;
   }
   if (st.lib === "product" && st.sku && !st.origin) {
     const rows = originRows(lib);
@@ -1308,7 +1299,7 @@ export async function render(view, ctx) {
     if (e.target.id !== "f-q") return;
     st.q = e.target.value;
     st.shown = PAGE;
-    if (st.lib === "product" && (!st.sku || !st.origin)) paintSkuBrowse();
+    if (st.lib === "product" && !st.origin) paintSkuBrowse();
     else {
       el.querySelector("#fgrid").innerHTML = grid(lib);
       el.querySelector("#fmain").scrollTop = 0;
@@ -1424,7 +1415,7 @@ export async function render(view, ctx) {
       return;
     }
     if (t.dataset.backSkus) { go(() => { st.sku = ""; st.step = ""; st.origin = ""; st.shown = 60; clearTicks(); }); return; }
-    if (t.dataset.sku !== undefined) { go(() => { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks(); }); return; }
+    if (t.dataset.sku !== undefined) { go(() => { st.sku = t.dataset.sku; st.origin = ""; st.step = ""; st.shown = 60; clearTicks(); }); return; }
     if (t.dataset.step !== undefined) { st.step = st.step === t.dataset.step ? "" : t.dataset.step; st.shown = 60; paint(); return; }
     if (t.dataset.group !== undefined) { st.group = t.dataset.group; st.shown = 60; paint(); return; }
     if (t.dataset.clip) {

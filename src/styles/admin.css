@@ -748,19 +748,51 @@ button.witem:hover { border-color: var(--accent); } .witem.sel { outline: 2px so
   .srow { grid-template-columns: minmax(0, 1fr) 44px 56px 44px; gap: 8px; } .srow .sa, .srow .sbar { display: none; }
 }
 
-/* Kho footage: mục sản phẩm theo thư mục SOURCE */
-.fcats { display: flex; gap: 10px; align-items: center; padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--pane); }
-.fcats .fsearch { width: 220px; flex: 0 0 220px; }
-.fcats .fpills { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; flex-wrap: wrap; }
-.fcats .pill { min-height: 32px; }
-.fcats .pill .n { font: 500 11.5px var(--mono); opacity: .7; }
-.fcats .pill[aria-pressed="true"] .n { opacity: .85; }
-.fcats .fletter { flex: none; height: 36px; min-width: 76px; margin: 0; padding: 0 10px; border: 0; border-radius: 9px;
-  background: var(--chip-bg); font: 600 13px var(--mono); color: var(--ink); cursor: pointer; }
+/* Kho footage: toolbar + layout màn chọn mã */
+.fscreen { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; }
+.fscreen > .ph-bar { flex: none; }
+.fscreen > .split { flex: 1 1 auto !important; min-height: 0; height: auto !important; }
+.fscreen > .ffilter {
+  flex: none; display: grid; grid-template-columns: 240px minmax(0, 1fr) 88px;
+  align-items: center; gap: 12px; height: 52px; padding: 0 20px;
+  border-bottom: 1px solid var(--line); background: var(--pane);
+}
+.fscreen > .ffilter .fsearch { width: auto; min-width: 0; }
+.fscreen > .ffilter .seg { min-width: 0; flex-wrap: nowrap; overflow-x: auto; justify-self: start; max-width: 100%; }
+.fscreen > .ffilter .seg > button { flex: none; white-space: nowrap; }
+.fscreen > .ffilter .seg > button .n { font: 500 11px var(--mono); opacity: .65; margin-left: 2px; }
+.fscreen > .ffilter .fletter {
+  width: 88px; height: 36px; margin: 0; padding: 0 8px; border: 0; border-radius: 9px;
+  background: var(--chip-bg); font: 600 13px var(--mono); color: var(--ink); cursor: pointer;
+}
+.fscreen .fempty { max-width: 380px; margin: 64px auto; text-align: center; color: var(--muted); }
+.fscreen .fempty b { display: block; color: var(--ink); font-size: 16px; font-weight: 650; margin-bottom: 8px; }
+.fscreen .fempty p { margin: 0; line-height: 1.55; }
+.fscreen .fhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.fscreen .fhead-t { min-width: 0; }
+.fscreen .fhead-t h2 { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.25; }
+.fscreen .fhead-t p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.fscreen .fchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fscreen > .split > .side-l { padding: 8px; }
+.fscreen > .split > .list { padding: 16px 20px 24px; gap: 14px; }
+.fscreen .sku-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.fscreen .fsrc {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: center;
+  text-align: left; padding: 10px 12px; min-height: 76px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--pane); color: inherit; cursor: pointer;
+}
+.fscreen .fsrc:hover { border-color: var(--accent); }
+.fscreen .fsrc.empty { opacity: .72; }
+.fscreen .fsrc-ph {
+  width: 56px; height: 72px; border-radius: 8px; overflow: hidden; background: var(--chip-bg); flex: none;
+}
+.fscreen .fsrc-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fscreen .fsrc-bd { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fscreen .fsrc-bd b { font-size: 13.5px; font-weight: 650; }
+.fscreen .fsrc-bd .n { font: 600 12px var(--mono); color: var(--muted); }
 @media (max-width: 900px) {
-  .fcats { padding: 8px 12px; flex-wrap: wrap; }
-  .fcats .fsearch { flex: 1 1 100%; width: auto; }
-  .fcats .fpills { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; }
+  .fscreen > .ffilter { grid-template-columns: 1fr 88px; height: auto; padding: 8px 12px; row-gap: 8px; }
+  .fscreen > .ffilter .fsearch { grid-column: 1 / -1; }
 }
 
 /* Quảng cáo (Meta Ads) */
