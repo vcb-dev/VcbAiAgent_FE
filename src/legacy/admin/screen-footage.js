@@ -246,7 +246,7 @@ function header(lib, src) {
     <button class="btn" id="src-scan" type="button" ${busy || !src.exists ? "disabled" : ""} title="${esc(src.source_dir || "")}">${scanLabel(lib, src)}</button>
     ${busy ? '<button class="btn danger" id="src-cancel" type="button" title="Dừng quét · clip đã quét xong vẫn giữ lại">Hủy quét</button>' : ""}
   </header>
-    ${st.lib === "product" && !st.sku ? catBar(lib) + letterBar(lib) : ""}`;
+    ${st.lib === "product" && !st.sku ? catBar(lib) : ""}`;
 }
 function scanTarget(lib, src) {
   if (st.lib === "product" && st.cat) {
@@ -266,14 +266,17 @@ function catBar(lib) {
   const cs = cats(lib);
   const allKind = readyRows().length || lib.filter((c) => inLib(c)).length;
   const b = (k, l, n) => `<button type="button" class="pill" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="mono muted">${n}</span></button>`;
-  return `<div class="fcats" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả loại", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>`;
-}
-function letterBar(lib) {
   const pool = skuBaseRows(lib).filter((r) => !st.cat || (r.category || skuKind(r.sku)) === st.cat);
   const counts = {};
   pool.forEach((r) => { const L = skuLetter(r.sku); counts[L] = (counts[L] || 0) + 1; });
-  const b = (k, l, n, off) => `<button type="button" class="pill az" data-letter="${esc(k)}" aria-pressed="${st.letter === k}" ${off ? "disabled" : ""} title="${n ? `${n} mã` : "Không có mã"}">${esc(l)}</button>`;
-  return `<div class="fletters" role="group" aria-label="Lọc A–Z">${b("", "Tất cả", pool.length, false)}${AZ.map((L) => b(L, L, counts[L] || 0, !counts[L])).join("")}${counts["#"] ? b("#", "#", counts["#"], false) : ""}</div>`;
+  const letters = AZ.filter((L) => counts[L]);
+  if (counts["#"]) letters.push("#");
+  const az = `<label class="fletter">A–Z
+    <select id="f-letter" aria-label="Lọc mã theo chữ cái">
+      <option value="">Tất cả</option>
+      ${letters.map((L) => `<option value="${esc(L)}" ${st.letter === L ? "selected" : ""}>${esc(L)}</option>`).join("")}
+    </select></label>`;
+  return `<div class="fcats" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả loại", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}${az}</div>`;
 }
 function sideList(lib, gs) {
   if (st.lib === "product" && st.sku && st.origin) {
@@ -1286,6 +1289,11 @@ export async function render(view, ctx) {
     e.preventDefault();
     commitComposer();
   });
+  el.addEventListener("change", (e) => {
+    if (e.target.id !== "f-letter") return;
+    st.letter = e.target.value;
+    paintSkuBrowse();
+  });
   el.addEventListener("input", (e) => {
     if (e.target.id === "f-step-name" && st.composer) {
       st.composer = { ...st.composer, name: e.target.value, err: "" };
@@ -1338,7 +1346,6 @@ export async function render(view, ctx) {
       return;
     }
     if (t.dataset.cat !== undefined) { go(() => { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; }); return; }
-    if (t.dataset.letter !== undefined) { st.letter = t.dataset.letter; paint(); return; }
     if (t.hasAttribute("data-back-origin")) {
       go(() => {
         st.origin = ""; st.step = ""; st.shown = 60; st.composer = null; st.boardErr = "";
