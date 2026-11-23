@@ -25,8 +25,8 @@ export function scriptForm(boot) {
         <select id="lang-select" aria-label="Ngôn ngữ video">${Object.entries(LANG_NAMES).map(([k]) => `<option value="${k}">${k.toUpperCase()}</option>`).join("")}</select></div>
       <input id="content-search" type="search" placeholder="Tìm kịch bản…" aria-label="Tìm kịch bản">
       <div id="content-meta" class="hint"></div>
-      <div id="content-voice-dur" class="hint"></div>
       <textarea id="script-input" rows="5" placeholder="Chọn kịch bản trong kho hoặc dán lời…" aria-label="Lời kịch bản"></textarea>
+      <div id="content-voice-dur" class="hint"></div>
       <details class="aiw-fold"><summary>AI viết kịch bản</summary>
         <div class="aiw">
           <textarea id="aiw-topic" rows="2" placeholder="Chủ đề, VD: Viên kim cương Hope" aria-label="Chủ đề cho AI viết"></textarea>
@@ -64,10 +64,30 @@ function contentOptions() {
   const cur = $("content-select").value;
   $("content-select").innerHTML = `<option value="">— Tự nhập kịch bản —</option>${groups}`;
   if (list.some((c) => c.id === cur)) $("content-select").value = cur;
+  syncScriptSearch();
+}
+function syncScriptSearch() {
+  const box = $("content-search");
+  if (!box) return;
+  const picked = !!$("content-select").value;
+  box.hidden = picked;
+  if (picked) box.value = "";
 }
 
 function voiceStale() {
   return st.voice && st.voice.text !== $("script-input").value.trim();
+}
+
+function estimateVoiceSeconds(text) {
+  const t = (text || "").trim();
+  if (!t) return 0;
+  const cjk = (t.match(/[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const thai = (t.match(/[\u0e00-\u0e7f]/g) || []).length;
+  if (cjk || thai) {
+    const rest = t.replace(/[\u0e00-\u0e7f\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/g, " ").split(/\s+/).filter(Boolean).length;
+    return Math.round(Math.max(cjk / 7.5 + thai / 14 + rest / 3, 0.3) * 10) / 10;
+  }
+  return Math.round(Math.max(t.split(/\s+/).filter(Boolean).length, 1) / 4.6 * 10) / 10;
 }
 
 function contentVoiceSeconds() {
@@ -81,14 +101,17 @@ function contentVoiceSeconds() {
 function paintContentDur() {
   const el = $("content-voice-dur");
   if (!el) return;
-  if (!st.content) { el.textContent = ""; return; }
+  const script = $("script-input")?.value.trim() || "";
   const d = contentVoiceSeconds();
   const lang = (st.lang || "vi").toUpperCase();
   if (d > 0) {
     el.innerHTML = `Thời lượng voice <b>${esc(lang)}</b>: <span class="mono">${fmt(d)}</span> · ${d.toFixed(1)}s`;
-  } else {
-    el.textContent = `Giọng HuyK MiniMax · tạo file đọc ở tab Giọng.`;
+    return;
   }
+  const est = estimateVoiceSeconds(script);
+  el.innerHTML = est > 0
+    ? `Voice khoảng <span class="mono">${fmt(est)}</span> · ${est.toFixed(1)}s`
+    : "";
 }
 
 export function voiceStudioHtml() {
@@ -215,6 +238,7 @@ function pickContent(id) {
   const c = st.items.find((x) => x.id === id) || null;
   st.content = c;
   st.voice = null;
+  syncScriptSearch();
   if (c) {
     $("script-input").value = c.script;
     applyLang();
@@ -283,10 +307,13 @@ const A4_KINDS = [
   { key: "product:final", from: "product", variant: "final", role: "Sản phẩm hoàn thiện", seconds: 8 },
   { key: "outro", from: "outro", role: "Outro", seconds: 4 },
 ];
+const HERO_SEC = 5;
 const FINAL_SEC = 8;
 const ORIGIN_LABEL = { huyk_sp: "HuyK chế tác", tho: "Thợ xưởng", legacy: "Kho cũ" };
 const a4Key = (s) => (s.from === "product" ? `product:${s.variant || "hero"}` : s.from);
+const isHeroSlot = (s) => s.from === "product" && s.variant !== "final";
 const isFinalSlot = (s) => s.from === "product" && s.variant === "final";
+const lockedSec = (s) => (isHeroSlot(s) ? HERO_SEC : isFinalSlot(s) ? FINAL_SEC : 0);
 
 function withSlotIndex(slots) {
   const count = { craft: 0, huyk: 0 };
@@ -301,7 +328,7 @@ function withSlotIndex(slots) {
     }
     if (s.from === "product") {
       const final = s.variant === "final";
-      return { ...s, role: final ? "Sản phẩm hoàn thiện" : "Sản phẩm", seconds: s.seconds || (final ? 8 : 5) };
+      return { ...s, role: final ? "Sản phẩm hoàn thiện" : "Sản phẩm", seconds: final ? FINAL_SEC : HERO_SEC };
     }
     return { ...s, role: "Outro", seconds: s.seconds || 4 };
   });
@@ -379,12 +406,14 @@ function applySlotSeconds(draft, force) {
   if (!draft?.slots?.length) return draft;
   const slots = withSlotIndex(draft.slots);
   const voice = Number(st.voice?.duration) || 0;
-  const share = slots.filter((s) => !isFinalSlot(s) && s.from !== "outro");
+  const share = slots.filter((s) => !lockedSec(s) && s.from !== "outro");
   const n = share.length;
-  const remain = voice > 0 ? Math.max(n * 1.5, voice - FINAL_SEC) : 0;
+  const lockedTotal = slots.reduce((sum, s) => sum + (lockedSec(s) || 0), 0);
+  const remain = voice > 0 ? Math.max(n * 1.5, voice - lockedTotal) : 0;
   const each = n && remain ? Math.round((remain / n) * 10) / 10 : 0;
   draft.slots = slots.map((s) => {
-    if (isFinalSlot(s)) return { ...s, seconds: FINAL_SEC };
+    const fixed = lockedSec(s);
+    if (fixed) return { ...s, seconds: fixed };
     if (s.from === "outro") return { ...s, seconds: s.manualSec && !force ? s.seconds : (s.seconds || 4) };
     if (s.manualSec && !force) return s;
     const sec = each || s.seconds || (s.from === "huyk" ? 4 : s.from === "craft" ? 3 : 5);
@@ -460,8 +489,8 @@ function paintA4() {
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
       const kinds = st.lang === "vi" ? A4_KINDS : A4_KINDS.filter((k) => k.key !== "outro");
       const kindOpts = kinds.map((k) => `<option value="${k.key}" ${a4Key(s) === k.key ? "selected" : ""}>${esc(s.from === "craft" && k.key === "craft" ? s.role : k.role)}</option>`).join("");
-      const secLocked = isFinalSlot(s);
-      const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${Number(s.seconds) || 1}" ${secLocked ? "disabled" : ""} aria-label="Giây ô ${i + 1}">`;
+      const fixed = lockedSec(s);
+      const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${fixed || Number(s.seconds) || 1}" ${fixed ? "disabled" : ""} title="${fixed ? `Cố định ${fixed}s` : "Giây"}" aria-label="Giây ô ${i + 1}">`;
       let src = `<b class="ell">${esc(s.from === "product" ? name : "Outro")}</b>`;
       if (s.from === "product") src = `<b class="ell">${esc(name)}</b>`;
       if (s.from === "craft") {
@@ -506,7 +535,7 @@ function onA4Change(e) {
       enableCraftSeq(draft, p, slot.at, false);
       draft.craft[slot.at] = { ...(draft.craft[slot.at] || {}), step: val, name: step?.label || val, at: slot.at, sequential: false };
     }
-  } else if (act === "sec" && slot) {
+  } else if (act === "sec" && slot && !lockedSec(slot)) {
     const sec = Number(e.target.value);
     if (!(sec > 0)) return;
     draft.slots = slots.map((s, n) => n === i ? { ...s, seconds: Math.round(sec * 10) / 10, manualSec: true } : s);
