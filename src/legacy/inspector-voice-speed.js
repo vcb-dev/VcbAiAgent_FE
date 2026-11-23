@@ -23,7 +23,7 @@ export function renderVoiceTab(s, part) {
     <select id="emotion-select" ${isEleven && !store.busy ? "" : "disabled"}>${options.join("")}</select>
     <button id="revoice-btn" class="primary" ${isEleven && !store.busy ? "" : "disabled"}>🎙 Đọc lại với cảm xúc này</button>
     <p class="hint" style="margin-top:8px">Đọc lại cả kịch bản trong 1 lượt để cảm xúc nối mạch (~10–25s, ≈ $0,07). Tag không bị đọc thành lời (đã kiểm bằng Scribe).
-      ${isMinimax ? "<br>Đoạn này đang đọc bằng giọng HuyK MiniMax." : isEleven ? "" : "<br>Bật giọng HuyK ở tab Âm thanh (cần ElevenLabs API key)."}</p>`;
+      ${isMinimax ? "<br>Đoạn này đang đọc bằng giọng HuyK MiniMax." : isEleven ? "" : "<br>Chọn giọng HuyK MiniMax ở trên rồi bấm Tạo voice."}</p>`;
 }
 
 export function wireVoiceTab(el, part) {

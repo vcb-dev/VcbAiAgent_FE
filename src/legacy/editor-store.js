@@ -2,7 +2,7 @@
 import { api } from "./api-client.js";
 
 export const store = {
-  boot: null, job: null, sel: { part: "p1", shot: 0 }, libTab: "script", inspTab: "scene", zoom: 1, busy: "",
+  boot: null, job: null, sel: { part: "p1", shot: 0 }, libTab: "script", inspTab: "voice", zoom: 1, busy: "",
 };
 const listeners = [];
 let poller = null;

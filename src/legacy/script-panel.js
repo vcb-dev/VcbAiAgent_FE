@@ -7,6 +7,13 @@ import { esc, media } from "./format-helpers.js";
 const FAM = { A1: "A1 · Mass traffic", A2: "A2 · Kiến thức", A3: "A3 · Niềm tin", A4: "A4 · Chế tác", A5: "A5 · Hero" };
 const st = { items: [], omni: null, minimax: null, langs: {}, content: null, voice: null, scriptAtVoice: "", lang: "vi", trSeq: 0, a4: null, huyk: [] };
 const LANG_NAMES = { vi: "Tiếng Việt", en: "English", th: "ไทย · Thái", ja: "日本語 · Nhật", id: "Indonesia", zh: "中文 · Đài Loan", es: "Español" };
+const HUYK_MINIMAX = [
+  { id: "HuyK_VN_4720ecdb", label: "HuyK VN · giọng Việt chính", lang: "vi" },
+  { id: "HuyK_USA_c0f8e735", label: "HuyK USA", lang: "en" },
+  { id: "HuyK_TH_e26deb62", label: "HuyK TH", lang: "th" },
+  { id: "HuyK_TBN_71a9c0d2", label: "HuyK TBN", lang: "es" },
+  { id: "Huyk_JP_4548aedc", label: "HuyK JP", lang: "ja" },
+];
 const $ = (id) => document.getElementById(id);
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
@@ -14,36 +21,33 @@ const stepHead = (n, label, extra = "") => `<div class="step-head"><span class="
 
 export function scriptForm(boot) {
   return `<div class="step-card">${stepHead(1, "Kịch bản", '<span id="content-fam"></span>')}
-      <div class="aiw">
-        <textarea id="aiw-topic" rows="2" placeholder="Nhập chủ đề để AI tìm thông tin và viết. VD: Viên kim cương Hope và lời nguyền" aria-label="Chủ đề cho AI viết"></textarea>
-        <div class="aiw-row"><select id="aiw-family" aria-label="Tuyến nội dung" title="Tuyến nội dung">${Object.keys(FAM).map((f) => `<option value="${f}" title="${FAM[f]}">${f}</option>`).join("")}</select>
-          <label class="aiw-chk" title="AI tìm dữ kiện thật trên Google trước khi viết"><input type="checkbox" id="aiw-web" checked> Tìm trên mạng</label>
-</div>
-        <button id="aiw-btn" class="small-btn aiw-go" type="button">✨ AI viết kịch bản</button>
-        <div id="aiw-hint" class="hint"></div></div>
-      <div class="aiw-or"><span>hoặc chọn trong kho</span></div>
-      <div style="display:flex;gap:6px"><select id="content-select" aria-label="Kịch bản trong kho" style="flex:1;min-width:0"><option value="">— Tự nhập kịch bản —</option></select>
-        <select id="lang-select" aria-label="Ngôn ngữ video" title="Ngôn ngữ của video: AI dịch kịch bản, HuyK đọc giọng tiếng đó, phụ đề tiếng đó" style="width:auto">
-          ${Object.entries(LANG_NAMES).map(([k]) => `<option value="${k}">${k.toUpperCase()}</option>`).join("")}</select></div>
-      <input id="content-search" type="text" placeholder="Tìm trong kho…" aria-label="Tìm kịch bản">
+      <div class="script-pick"><select id="content-select" aria-label="Kịch bản trong kho"><option value="">— Tự nhập kịch bản —</option></select>
+        <select id="lang-select" aria-label="Ngôn ngữ video">${Object.entries(LANG_NAMES).map(([k]) => `<option value="${k}">${k.toUpperCase()}</option>`).join("")}</select></div>
+      <input id="content-search" type="search" placeholder="Tìm kịch bản…" aria-label="Tìm kịch bản">
       <div id="content-meta" class="hint"></div>
       <div id="content-voice-dur" class="hint"></div>
-      <textarea id="script-input" rows="7" placeholder="Chọn kịch bản trong kho hoặc dán kịch bản…" aria-label="Lời kịch bản"></textarea></div>
-    <div class="step-card">${stepHead(2, "Sản phẩm")}
-      <select id="product-select" aria-label="Bộ footage sản phẩm"><option value="">— Không gắn sản phẩm —</option>
-        ${boot.products.map((p) => `<option value="${p.sku}">${esc(p.sku)} · ${esc((p.name || "").replace(/-/g, " "))} (${p.clips || 0} clip · ${(p.step_labels || p.steps || []).length} CĐ)</option>`).join("")}</select>
-      <div id="product-steps" class="hint">Chỉ hiện mã đủ ≥3 công đoạn chế tác.</div>
-      <label class="field">Tuyến nội dung <select id="line-select" aria-label="Tuyến nội dung"><option value="A4">A4</option></select></label>
+      <textarea id="script-input" rows="5" placeholder="Chọn kịch bản trong kho hoặc dán lời…" aria-label="Lời kịch bản"></textarea>
+      <details class="aiw-fold"><summary>AI viết kịch bản</summary>
+        <div class="aiw">
+          <textarea id="aiw-topic" rows="2" placeholder="Chủ đề, VD: Viên kim cương Hope" aria-label="Chủ đề cho AI viết"></textarea>
+          <div class="aiw-row"><select id="aiw-family" aria-label="Tuyến nội dung">${Object.keys(FAM).map((f) => `<option value="${f}">${f}</option>`).join("")}</select>
+            <label class="aiw-chk"><input type="checkbox" id="aiw-web" checked> Tìm mạng</label>
+            <button id="aiw-btn" class="small-btn aiw-go" type="button">Viết</button></div>
+          <div id="aiw-hint" class="hint"></div></div></details></div>
+    <div class="step-card">${stepHead(2, "Cảnh")}
+      <select id="product-select" aria-label="Bộ footage sản phẩm"><option value="">— Chọn mã sản phẩm —</option>
+        ${boot.products.map((p) => `<option value="${p.sku}">${esc(p.sku)} · ${esc((p.name || "").replace(/-/g, " "))}</option>`).join("")}</select>
+      <div id="product-steps" class="hint ell"></div>
+      <select id="line-select" class="hidden" aria-hidden="true"><option value="A4" selected>A4</option></select>
       <div id="a4-route"></div>
       <details class="hint"><summary>Tuỳ chọn dựng</summary>
         <label class="field">Template <select id="template-select"><option value="auto">Tự động</option>
           ${boot.templates.map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</select></label>
-        <label class="field">Tách phân cảnh <select id="planner-select"><option value="rules" selected>Nhanh · tức thì</option>
-          <option value="claude" ${boot.claude_available ? "" : "disabled"}>AI · kỹ hơn, chậm hơn${boot.claude_available ? "" : " (cần khoá AI)"}</option></select></label>
-        <div class="hint">Kịch bản từ Kho content dùng sẵn phân cảnh AI đã viết, không phải chờ.</div></details></div>
-    <div class="step-card" id="illus-card">${stepHead(3, "Hình minh hoạ", '<span class="hint">A1 · A2 · A3</span>')}
-      <label class="ill-chk"><input type="checkbox" id="ill-web"> <span><b>Cào hình &amp; video trên mạng</b><small>Báo, bảo tàng, YouTube, Wikimedia… AI chấm độ khớp từng câu rồi tự ghép</small></span></label>
-      <label class="ill-chk"><input type="checkbox" id="ill-ai"> <span><b>AI tạo ảnh minh hoạ</b><small id="ill-ai-sub">Gemini vẽ ảnh cho câu không tìm được hình khớp · ≈1.000đ/ảnh</small></span></label></div>
+        <label class="field">Tách phân cảnh <select id="planner-select"><option value="rules" selected>Nhanh</option>
+          <option value="claude" ${boot.claude_available ? "" : "disabled"}>AI${boot.claude_available ? "" : " (cần khoá)"}</option></select></label></details></div>
+    <div class="step-card" id="illus-card">${stepHead(3, "Hình minh hoạ")}
+      <label class="ill-chk"><input type="checkbox" id="ill-web"> <span><b>Cào hình trên mạng</b></span></label>
+      <label class="ill-chk"><input type="checkbox" id="ill-ai"> <span><b>AI tạo ảnh</b><small id="ill-ai-sub"></small></span></label></div>
     <button id="build-btn" class="primary">Dựng video</button>
     <div id="build-hint" class="hint" style="text-align:center"></div>
     <div id="job-summary" class="hint hidden"></div>`;
@@ -83,17 +87,18 @@ function paintContentDur() {
   if (d > 0) {
     el.innerHTML = `Thời lượng voice <b>${esc(lang)}</b>: <span class="mono">${fmt(d)}</span> · ${d.toFixed(1)}s`;
   } else {
-    el.textContent = `Chưa có voice ${lang} cho kịch bản này — tạo ở tab Giọng.`;
+    el.textContent = `Giọng HuyK MiniMax · tạo file đọc ở tab Giọng.`;
   }
 }
 
 export function voiceStudioHtml() {
   return `<div class="step-card" style="margin-bottom:12px">
-      <div class="step-head"><span class="eyebrow">Giọng HuyK</span><span class="spacer"></span><span id="voice-dur" class="mono hint"></span></div>
+      <div class="step-head"><span class="eyebrow">Giọng HuyK MiniMax</span><span class="spacer"></span><span id="voice-dur" class="mono hint"></span></div>
+      <div id="huyk-voices" class="chips" style="margin:0 0 8px"></div>
       <div id="voice-list"></div>
       <div id="voice-player"></div>
       <div style="display:flex;gap:6px;align-items:center">
-        <select id="omni-voice" title="Giọng HuyK" aria-label="Giọng HuyK" style="flex:1;min-width:110px"></select>
+        <select id="omni-voice" title="Giọng HuyK MiniMax" aria-label="Giọng HuyK MiniMax" style="flex:1;min-width:110px"></select>
         <button id="voice-btn" class="small-btn" type="button">Tạo voice</button></div>
       <div id="voice-hint" class="hint"></div></div>`;
 }
@@ -111,6 +116,13 @@ export function mountVoiceStudio(root) {
     if (job && (job.script || "").trim() === st.voice.text) { actions.voiceTrack(st.voice.audio); return; }
     if (job && !confirm("Timeline đang mở là kịch bản khác. Dựng timeline mới với kịch bản + voice này?")) return;
     $("build-btn").click();
+  });
+  root.querySelector("#huyk-voices")?.addEventListener("click", (e) => {
+    const id = e.target.closest("[data-huyk-voice]")?.dataset.huykVoice;
+    const sel = root.querySelector("#omni-voice");
+    if (!id || !sel) return;
+    sel.value = id;
+    paintVoice();
   });
   paintVoice();
   refreshVoices();
@@ -143,16 +155,16 @@ function paintVoice() {
       <input type="radio" name="voice-pick" value="${esc(lang)}" ${st.voice?.audio === v.audio ? "checked" : ""}>
       Voice có sẵn · ${esc(lang.toUpperCase())} · ${(v.duration || 0).toFixed(1)}s · ${v.uploaded ? "file tải lên" : esc((v.provider || "").split(":")[0])}</label>`).join("")
     : st.voice ? "" : '<div class="hint">Kịch bản này chưa có voice — chọn giọng MiniMax rồi bấm "Tạo voice".</div>';
-  const mm = st.minimax?.voices?.length ? st.minimax : null;
+  const voices = (st.minimax?.voices?.length ? st.minimax.voices : HUYK_MINIMAX);
+  const byLang = st.minimax?.by_lang || {};
   const sel = $("omni-voice");
-  if (mm) {
-    const preferred = mm.by_lang?.[st.lang] || mm.by_lang?.vi || mm.voices[0].id;
-    const pick = mm.voices.some((v) => v.id === sel.value) ? sel.value : preferred;
-    sel.innerHTML = mm.voices.map((v) => `<option value="${esc(v.id)}" ${v.id === pick ? "selected" : ""}>${esc(v.label)}</option>`).join("");
-    sel.disabled = false;
-  } else {
-    sel.innerHTML = `<option value="">${st.minimax ? "Chưa có giọng MiniMax" : "Đang tải giọng MiniMax…"}</option>`;
-    sel.disabled = true;
+  const preferred = byLang[st.lang] || byLang.vi || voices[0]?.id;
+  const pick = voices.some((v) => v.id === sel.value) ? sel.value : preferred;
+  sel.innerHTML = voices.map((v) => `<option value="${esc(v.id)}" ${v.id === pick ? "selected" : ""}>${esc(v.label)} · ${(v.lang || "").toUpperCase()}</option>`).join("");
+  sel.disabled = false;
+  const chips = $("huyk-voices");
+  if (chips) {
+    chips.innerHTML = voices.map((v) => `<button type="button" class="small-btn ${v.id === pick ? "on" : ""}" data-huyk-voice="${esc(v.id)}">${esc(v.label)}</button>`).join("");
   }
   const v = st.voice;
   $("voice-player").innerHTML = v ? `<audio controls preload="metadata" src="${esc(media(v.audio))}" style="width:100%;height:34px"></audio>
@@ -225,7 +237,7 @@ function illusHint() {
   if (!$("ill-ai").disabled) $("ill-ai-sub").textContent = $("ill-web").checked
     ? "Gemini vẽ ảnh cho câu không tìm được hình khớp · ≈1.000đ/ảnh" : "Không cào mạng: Gemini vẽ ảnh cho mọi câu minh hoạ · ≈1.000đ/ảnh";
   const fam = st.content?.family;
-  $("illus-card").classList.toggle("dim", !!fam && !["A1", "A2", "A3"].includes(fam));
+  $("illus-card").classList.toggle("dim", !["A1", "A2", "A3"].includes(fam || ""));
 }
 
 /** Topic typed by the editor → AI looks it up on the web → 5A script, saved in Kho content as a draft, picked here. */
@@ -353,18 +365,14 @@ function applyCraftChain(draft, p, fromAt) {
 
 function enableCraftSeq(draft, p, at, on) {
   draft.craft = draft.craft || [];
-  const row = { ...(draft.craft[at] || { at }), at, sequential: !!on };
-  draft.craft[at] = row;
   if (!on) {
-    draft.craft[at] = { ...row, sequential: false };
-    applyCraftChain(draft, p);
+    draft.craft[at] = { ...(draft.craft[at] || { at }), at, sequential: false };
     return;
   }
-  draft.craftOrigin = pickCraftOrigin(p);
-  withSlotIndex(draft.slots).filter((s) => s.from === "craft").forEach((s) => {
-    draft.craft[s.at] = { ...(draft.craft[s.at] || { at: s.at }), at: s.at, sequential: true, origin: draft.craftOrigin || null };
-  });
-  applyCraftChain(draft, p);
+  const origin = pickCraftOrigin(p);
+  const ordered = (origin && originLists(p)[origin]) || orderedCraftSteps(p?.step_detail);
+  const step = ordered[0];
+  draft.craft[at] = { at, sequential: true, origin, step: step?.step, name: step?.label };
 }
 
 function applySlotSeconds(draft, force) {
@@ -429,9 +437,9 @@ function a4Payload() {
   const slots = withSlotIndex(draft.slots).filter((s) => st.lang === "vi" || s.from !== "outro");
   return {
     slots: slots.map((s) => ({ kind: s.from, variant: s.variant || null, seconds: s.seconds, at: s.at ?? null })),
-    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || draft.craftOrigin || null, sequential: !!c.sequential })),
+    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || null, sequential: !!c.sequential })),
     huyk: [],
-    craft_origin: draft.craftOrigin || null,
+    craft_origin: null,
   };
 }
 
@@ -447,34 +455,28 @@ function paintA4() {
   const slots = withSlotIndex(draft.slots);
   const steps = p.step_detail || [];
   const name = (p.name || p.sku).replace(/-/g, " ");
-  root.innerHTML = `<div class="sec-title"><span>Footage theo tuyến A4</span></div>
-    <div class="hint">Ô Chế tác: chọn “Theo thứ tự công đoạn” trong dropdown (cấu hình logic kho sẽ làm sau). Ô HuyK bốc ngẫu nhiên. Hoàn thiện cố định ${FINAL_SEC}s.</div>
-    ${slots.map((s, i) => {
+  root.innerHTML = `${slots.map((s, i) => {
       if (s.from === "outro" && st.lang !== "vi") return "";
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
       const kinds = st.lang === "vi" ? A4_KINDS : A4_KINDS.filter((k) => k.key !== "outro");
       const kindOpts = kinds.map((k) => `<option value="${k.key}" ${a4Key(s) === k.key ? "selected" : ""}>${esc(s.from === "craft" && k.key === "craft" ? s.role : k.role)}</option>`).join("");
       const secLocked = isFinalSlot(s);
-      const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${Number(s.seconds) || 1}" ${secLocked ? "disabled" : ""} title="${secLocked ? `Hoàn thiện cố định ${FINAL_SEC}s` : "Giây công đoạn"}" aria-label="Giây ô ${i + 1}">`;
-      let src = `<b>${esc(s.from === "product" ? name : "kho outro · chỉ tiếng Việt")}</b>`;
-      if (s.from === "product") {
-        const n = s.variant === "final" ? (p.final_clips || 0) : (p.hero_clips || 0);
-        src = `<b>${esc(name)}</b><span class="muted"> · ${n} clip</span>`;
-      }
+      const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${Number(s.seconds) || 1}" ${secLocked ? "disabled" : ""} aria-label="Giây ô ${i + 1}">`;
+      let src = `<b class="ell">${esc(s.from === "product" ? name : "Outro")}</b>`;
+      if (s.from === "product") src = `<b class="ell">${esc(name)}</b>`;
       if (s.from === "craft") {
         const seqOn = !!current?.sequential;
         const extra = !seqOn && current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
         src = `<span class="slot-src"><select class="a4-craft-pick" data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}">
             <option value="seq" ${seqOn ? "selected" : ""}>Theo thứ tự công đoạn</option>
-            ${current?.step || seqOn ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
-            ${steps.map((st) => `<option value="${esc(st.step)}" ${!seqOn && current?.step === st.step ? "selected" : ""}>${esc(st.label)}${st.clips != null ? ` · ${st.clips} clip` : ""}</option>`).join("")}
-          </select><button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn">↻</button></span>`;
+            ${seqOn ? "" : `${current?.step ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
+            ${steps.map((st) => `<option value="${esc(st.step)}" ${current?.step === st.step ? "selected" : ""}>${esc(st.label)}</option>`).join("")}`}
+          </select>${seqOn ? "" : `<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn">↻</button>`}</span>`;
       } else if (s.from === "huyk") {
-        src = `<b>HuyK · ngẫu nhiên</b>`;
+        src = `<span class="muted">Ngẫu nhiên</span>`;
       }
-      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}" aria-label="Loại ô ${i + 1}">${kindOpts}</select>${secBox}${src}</div></div>`;
-    }).join("")}
-    ${steps.length ? "" : `<div class="hint">Mã ${esc(p.sku)} chưa có công đoạn chế tác trong catalog.</div>`}`;
+      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}">${kindOpts}</select>${secBox}${src}</div></div>`;
+    }).join("")}`;
 }
 
 function onA4Change(e) {
@@ -511,10 +513,6 @@ function onA4Change(e) {
     return;
   } else return;
   paintA4();
-  if (act === "craft") {
-    withSlotIndex(draft.slots).forEach((s, n) => { if (s.from === "craft") liveA4(n); });
-    return;
-  }
   liveA4(i);
 }
 
@@ -608,9 +606,7 @@ function paintProductHint() {
     el.textContent = "Chỉ hiện mã đủ ≥3 công đoạn chế tác.";
     return;
   }
-  el.textContent = labels.length
-    ? `Công đoạn có footage: ${labels.join(" → ")}${p.has_final ? ` · hoàn thiện ${p.final_clips || 0} clip` : " · chưa có cảnh hoàn thiện"}`
-    : `${p.sku} · ${p.clips || 0} clip`;
+  el.textContent = labels.length ? `${labels.length} công đoạn` : `${p.clips || 0} clip`;
 }
 
 let _metaSeq = 0;
@@ -625,10 +621,6 @@ async function fillProductMeta(sku) {
     store.boot._libSku = sku;
     const p = productOf();
     if (p && (clips || []).length) Object.assign(p, metaFromClips(clips || []));
-    if (st.a4?.sku === sku && (st.a4.craft || []).some((c) => c?.sequential)) {
-      if (!st.a4.craftOrigin || !originLists(p)[st.a4.craftOrigin]) enableCraftSeq(st.a4, p, 0, true);
-      else applyCraftChain(st.a4, p);
-    }
     paintProductHint();
     paintA4();
   } catch {

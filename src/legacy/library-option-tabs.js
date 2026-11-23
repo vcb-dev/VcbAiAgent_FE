@@ -22,7 +22,7 @@ export function renderAudioTab(s) {
   const c = cfg(s);
   const tracks = s.boot.music.map((t) => opt(s, "music_track", t.id, esc(t.name), `${t.duration}s`)).join("");
   return `<div class="sec"><div class="sec-title">Giọng đọc (VO)</div><div class="opt-grid">
-      ${opt(s, "voice", "huyk", "Giọng HuyK", s.boot.eleven_available ? "ElevenLabs clone · eleven_v4" : "cần API key")}
+      ${opt(s, "voice", "huyk", "Giọng HuyK MiniMax", "clone MiniMax · speech-2.8-hd")}
       ${opt(s, "voice", "demo", "Giọng demo", "macOS “Linh” · offline")}</div>
       <p class="hint" style="margin-top:6px">Cảm xúc từng câu chỉnh ở panel phải → tab <b>Giọng</b>.</p></div>
     <div class="sec"><div class="sec-title">Nhạc nền</div><div class="opt-list">${tracks}</div>
