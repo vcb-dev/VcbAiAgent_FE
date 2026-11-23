@@ -237,16 +237,21 @@ function header(lib, src) {
     return lib.filter((c) => libOf(c) === k).length;
   };
   const busy = src.state === "scanning";
+  const skuBrowse = st.lib === "product" && !st.sku;
   return `<header class="ph-bar"><h1>Kho footage</h1>
     <div class="seg" role="tablist" aria-label="Kho">${Object.entries(LIBS).map(([k, v]) => `<button type="button" role="tab" data-lib="${k}" aria-selected="${st.lib === k}">${v} · ${n(k)}</button>`).join("")}</div>
     <div class="sp"></div>
-    <label class="search" style="width:240px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-      <span class="sr">Tìm footage</span><input id="f-q" type="search" placeholder="${st.lib === "product" && !st.sku ? "Tìm mã SP" : "Tìm clip, công đoạn"}" value="${esc(st.q)}"></label>
+    ${skuBrowse ? "" : searchField()}
     <span class="muted small" title="Phần mềm tự kiểm tra thư mục SOURCE mỗi 10 phút và quét file mới">${src.auto_paused_until ? `Tự quét tạm dừng đến ${src.auto_paused_until}` : "Tự quét · 10 phút"}</span>
     <button class="btn" id="src-scan" type="button" ${busy || !src.exists ? "disabled" : ""} title="${esc(src.source_dir || "")}">${scanLabel(lib, src)}</button>
     ${busy ? '<button class="btn danger" id="src-cancel" type="button" title="Dừng quét · clip đã quét xong vẫn giữ lại">Hủy quét</button>' : ""}
   </header>
-    ${st.lib === "product" && !st.sku ? catBar(lib) : ""}`;
+    ${skuBrowse ? catBar(lib) : ""}`;
+}
+function searchField() {
+  const skuBrowse = st.lib === "product" && !st.sku;
+  return `<label class="search${skuBrowse ? " fsearch" : ""}"${skuBrowse ? "" : ' style="width:240px"'}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <span class="sr">Tìm footage</span><input id="f-q" type="search" placeholder="${skuBrowse ? "Tìm mã SP" : "Tìm clip, công đoạn"}" value="${esc(st.q)}"></label>`;
 }
 function scanTarget(lib, src) {
   if (st.lib === "product" && st.cat) {
@@ -265,18 +270,19 @@ function scanLabel(lib, src) {
 function catBar(lib) {
   const cs = cats(lib);
   const allKind = readyRows().length || lib.filter((c) => inLib(c)).length;
-  const b = (k, l, n) => `<button type="button" class="pill" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="mono muted">${n}</span></button>`;
+  const b = (k, l, n) => `<button type="button" class="pill" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="n">${n}</span></button>`;
   const pool = skuBaseRows(lib).filter((r) => !st.cat || (r.category || skuKind(r.sku)) === st.cat);
   const counts = {};
   pool.forEach((r) => { const L = skuLetter(r.sku); counts[L] = (counts[L] || 0) + 1; });
   const letters = AZ.filter((L) => counts[L]);
   if (counts["#"]) letters.push("#");
-  const az = `<label class="fletter">A–Z
-    <select id="f-letter" aria-label="Lọc mã theo chữ cái">
-      <option value="">Tất cả</option>
+  return `<div class="fcats">
+    ${searchField()}
+    <div class="fpills" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>
+    <select id="f-letter" class="fletter" aria-label="Lọc A–Z">
+      <option value="">A–Z</option>
       ${letters.map((L) => `<option value="${esc(L)}" ${st.letter === L ? "selected" : ""}>${esc(L)}</option>`).join("")}
-    </select></label>`;
-  return `<div class="fcats" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả loại", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}${az}</div>`;
+    </select></div>`;
 }
 function sideList(lib, gs) {
   if (st.lib === "product" && st.sku && st.origin) {
