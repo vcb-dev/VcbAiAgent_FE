@@ -1,7 +1,7 @@
 // Kho footage theo mã SP: chọn SKU rồi xếp công đoạn của đúng mã đó (không gộp mọi mã chung một cột).
 import { api, esc, media, thumbImg, toast } from "./admin-api.js";
 
-const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", shown: 60, picked: null,
+const st = { lib: "product", cat: "", sku: "", origin: "", step: "", group: "", q: "", letter: "", shown: 60, picked: null,
   hideStill: false, composer: null, boardErr: "", checked: new Set(), lastTick: "", expand: new Set(),
   dirty: false, saving: false };
 const clearTicks = () => { st.checked = new Set(); st.lastTick = ""; };
@@ -47,6 +47,11 @@ let summaryRef = { huyk: 0, outro: 0, illus: 0, skus: {} };
 let extraFolders = [];
 const SKU_KIND = { N: "nhan", L: "lac_tay", B: "bong_tai", K: "day_chuyen", D: "day_chuyen", O: "bong_tai" };
 const skuKind = (sku) => SKU_KIND[String(sku || "").trim().charAt(0).toUpperCase()] || "khac";
+const skuLetter = (sku) => {
+  const ch = String(sku || "").trim().charAt(0).toUpperCase();
+  return /[A-Z]/.test(ch) ? ch : "#";
+};
+const AZ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const readyRows = () => (covRef.rows || []).filter((r) => (r.clips || 0) > 0 || (r.sku && r.ready));
 const libOf = (c) => (c.library === "huyk" ? "huyk" : c.library === "outro" ? "outro" : c.library === "illus" ? "illus" : "product");
 const readySkus = () => new Set(readyRows().map((r) => r.sku));
@@ -125,6 +130,7 @@ function skuRows(lib, cov) {
   const q = st.q.trim().toLowerCase();
   return skuBaseRows(lib).filter((r) => {
     if (st.cat && (r.category || skuKind(r.sku)) !== st.cat) return false;
+    if (st.letter && skuLetter(r.sku) !== st.letter) return false;
     if (!q) return true;
     return `${r.sku} ${r.name || ""}`.toLowerCase().includes(q);
   }).map((r) => {
@@ -240,7 +246,7 @@ function header(lib, src) {
     <button class="btn" id="src-scan" type="button" ${busy || !src.exists ? "disabled" : ""} title="${esc(src.source_dir || "")}">${scanLabel(lib, src)}</button>
     ${busy ? '<button class="btn danger" id="src-cancel" type="button" title="Dừng quét · clip đã quét xong vẫn giữ lại">Hủy quét</button>' : ""}
   </header>
-    ${st.lib === "product" && !st.sku ? catBar(lib) : ""}`;
+    ${st.lib === "product" && !st.sku ? catBar(lib) + letterBar(lib) : ""}`;
 }
 function scanTarget(lib, src) {
   if (st.lib === "product" && st.cat) {
@@ -261,6 +267,13 @@ function catBar(lib) {
   const allKind = readyRows().length || lib.filter((c) => inLib(c)).length;
   const b = (k, l, n) => `<button type="button" class="pill" data-cat="${esc(k)}" aria-pressed="${st.cat === k}">${esc(l)} <span class="mono muted">${n}</span></button>`;
   return `<div class="fcats" role="group" aria-label="Loại sản phẩm">${b("", "Tất cả loại", allKind)}${cs.map((c) => b(c.key, c.label, c.n)).join("")}</div>`;
+}
+function letterBar(lib) {
+  const pool = skuBaseRows(lib).filter((r) => !st.cat || (r.category || skuKind(r.sku)) === st.cat);
+  const counts = {};
+  pool.forEach((r) => { const L = skuLetter(r.sku); counts[L] = (counts[L] || 0) + 1; });
+  const b = (k, l, n, off) => `<button type="button" class="pill az" data-letter="${esc(k)}" aria-pressed="${st.letter === k}" ${off ? "disabled" : ""} title="${n ? `${n} mã` : "Không có mã"}">${esc(l)}</button>`;
+  return `<div class="fletters" role="group" aria-label="Lọc A–Z">${b("", "Tất cả", pool.length, false)}${AZ.map((L) => b(L, L, counts[L] || 0, !counts[L])).join("")}${counts["#"] ? b("#", "#", counts["#"], false) : ""}</div>`;
 }
 function sideList(lib, gs) {
   if (st.lib === "product" && st.sku && st.origin) {
@@ -922,8 +935,11 @@ export async function render(view, ctx) {
     const mainTop = el.querySelector("#fmain")?.scrollTop || 0;
     const hostTop = scrollHost()?.scrollTop || 0;
     const winTop = window.scrollY;
+    const qEl = el.querySelector("#f-q");
+    const keepQ = document.activeElement === qEl;
+    const qSel = keepQ ? [qEl.selectionStart, qEl.selectionEnd] : null;
     el.innerHTML = `${header(lib, src)}<div class="split${board ? " board" : ""}">
-      <aside class="side-l" aria-label="Nhóm">${board ? "" : sideList(lib, gs)}</aside>
+      <aside class="side-l" id="fside" aria-label="Nhóm">${board ? "" : sideList(lib, gs)}</aside>
       <section class="list" id="fmain">${mainHead(lib, gs)}<div id="fgrid">${grid(lib)}</div></section></div><div id="fprev">${preview(lib)}</div>`;
     const restoreScroll = () => {
       const side = el.querySelector(".side-l");
@@ -937,12 +953,26 @@ export async function render(view, ctx) {
     restoreScroll();
     requestAnimationFrame(() => requestAnimationFrame(restoreScroll));
     watchMore();
+    if (keepQ) {
+      const n = el.querySelector("#f-q");
+      if (n) {
+        n.focus({ preventScroll: true });
+        try { n.setSelectionRange(qSel[0], qSel[1]); } catch { /* ignore */ }
+      }
+    }
     const inp = el.querySelector("#f-step-name");
     if (inp && (st.composer?.kind === "add" || st.composer?.kind === "edit")) {
       inp.focus({ preventScroll: true });
       const pos = inp.value.length;
       try { inp.setSelectionRange(pos, pos); } catch { /* ignore */ }
     }
+  };
+  const paintSkuBrowse = () => {
+    const gs = groups(lib, cov);
+    const side = el.querySelector("#fside") || el.querySelector(".side-l");
+    if (side) side.innerHTML = sideList(lib, gs);
+    const fgrid = el.querySelector("#fgrid");
+    if (fgrid) fgrid.innerHTML = grid(lib);
   };
   const syncTicks = () => {
     el.querySelectorAll("[data-clip]").forEach((n) => {
@@ -1264,7 +1294,7 @@ export async function render(view, ctx) {
     if (e.target.id !== "f-q") return;
     st.q = e.target.value;
     st.shown = PAGE;
-    if (st.lib === "product" && (!st.sku || !st.origin)) paint();
+    if (st.lib === "product" && (!st.sku || !st.origin)) paintSkuBrowse();
     else {
       el.querySelector("#fgrid").innerHTML = grid(lib);
       el.querySelector("#fmain").scrollTop = 0;
@@ -1303,11 +1333,12 @@ export async function render(view, ctx) {
     if (t.dataset.lib) {
       go(() => {
         st.lib = t.dataset.lib; st.sku = ""; st.origin = ""; st.group = st.lib === "outro" ? "huyk" : "";
-        st.cat = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks();
+        st.cat = ""; st.letter = ""; st.step = ""; st.q = ""; st.shown = 60; clearTicks();
       });
       return;
     }
     if (t.dataset.cat !== undefined) { go(() => { st.cat = t.dataset.cat; st.sku = ""; st.step = ""; st.shown = 60; }); return; }
+    if (t.dataset.letter !== undefined) { st.letter = t.dataset.letter; paint(); return; }
     if (t.hasAttribute("data-back-origin")) {
       go(() => {
         st.origin = ""; st.step = ""; st.shown = 60; st.composer = null; st.boardErr = "";
