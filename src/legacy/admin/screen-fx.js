@@ -41,16 +41,21 @@ function startEdit(info, id) {
   draft = t ? JSON.parse(JSON.stringify({ ...t, lines: linesOf(t), sequence: t.sequence || [], craft_step_sec: Number(t.craft_step_sec) || 1 })) : null;
 }
 
-function rowHtml(b, i, steps) {
+const clampStep = (n) => Math.min(15, Math.max(0.5, Math.round(Number(n) * 10) / 10));
+function rowHtml(b, i, steps, craftN) {
   const c = (BLK[b.role] || BLK.outro)[1];
+  const roleLabel = (k, l) => (k === "craft" ? `Chế tác ${craftN || ""}`.trim() : l);
   return `<div class="tblk" draggable="true" data-bi="${i}">
     <span class="tgrip" aria-hidden="true">⠿</span><span class="tdot" style="background:${c}"></span>
     <div class="tblk-main"><div class="tblk-top">
-      <select class="tsel" data-bf="role" aria-label="Loại khối">${Object.entries(BLK).map(([k, [l]]) => `<option value="${k}" ${b.role === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="tsel" data-bf="role" aria-label="Loại khối">${Object.entries(BLK).map(([k, [l]]) => `<option value="${k}" ${b.role === k ? "selected" : ""}>${roleLabel(k, l)}</option>`).join("")}</select>
       ${b.role === "craft" ? `<select class="tsel" data-bf="step" aria-label="Công đoạn"><option value="">Công đoạn tự chọn</option>${steps.map((x) => `<option value="${x.key}" ${b.step === x.key ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>` : ""}
       <span class="tsp"></span></div>
       ${b.role === "outro" ? "" : `<div class="tblk-flags"><label><input type="checkbox" data-bf="silent" ${b.silent ? "checked" : ""}> không lời</label>
-        <label><input type="checkbox" data-bf="loop" ${b.loop ? "checked" : ""}> lặp đến hết</label></div>`}</div>
+        <label><input type="checkbox" data-bf="loop" ${b.loop ? "checked" : ""}> lặp đến hết</label></div>`}
+      ${b.role === "craft" ? `<label class="tstep">Mỗi công đoạn
+        <input type="number" data-bf="step_sec" min="0.5" max="15" step="0.5" value="${Number(b.step_sec) || 1}" aria-label="Giây mỗi công đoạn của Chế tác ${craftN}">
+        <span>giây</span></label>` : ""}</div>
     <button class="tx" type="button" data-bdel="${i}" aria-label="Bỏ khối">✕</button></div>`;
 }
 
@@ -66,11 +71,7 @@ function tplView(info) {
       <div class="tmeta"><select id="t-fam" class="in" aria-label="Kiểu dựng">${Object.entries(info.families).map(([k, v]) => `<option value="${k}" ${d.family === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
         <span class="tlines">${(info.lines || ["A1", "A2", "A3", "A4", "A5"]).map((l) => `<button type="button" class="tline${d.lines.includes(l) ? " on" : ""}" data-tline="${l}">${l}</button>`).join("")}</span></div>
       ${d.sequence.length ? `${bar(d.sequence)}<div class="small muted">Thời lượng theo lời đọc · clip ngắn thì bốc clip khác trám · kéo ⠿ đổi thứ tự</div>
-        ${d.family === "A4" ? `<label class="tstep">Mỗi công đoạn
-          <input id="t-step-sec" type="number" min="0.5" max="15" step="0.5" value="${Number(d.craft_step_sec) || 1}" aria-label="Giây mỗi công đoạn chế tác">
-          <span>giây</span></label>
-          <p class="small muted tstep-note">Ô chế tác theo thứ tự: số giây của ô ÷ số này = số công đoạn. Ví dụ ô 3s, mỗi công đoạn 1s → đổ bạc, nung, đổ khuôn, mỗi đoạn 1s.</p>` : ""}
-        <div class="tblks" id="tblks">${d.sequence.map((b, i) => rowHtml(b, i, steps)).join("")}</div>`
+        <div class="tblks" id="tblks">${(() => { let n = 0; return d.sequence.map((b, i) => rowHtml(b, i, steps, b.role === "craft" ? ++n : 0)).join(""); })()}</div>`
       : `<div class="empty" style="padding:18px">Template này để AI tự xếp cảnh theo kịch bản.<br><br><button class="btn sm" type="button" data-tseq>Tự xếp trình tự cảnh</button></div>`}
       ${d.sequence.length ? `<div class="tadd"><span class="small muted">Thêm khối</span>${Object.entries(BLK).map(([k, [l, c]]) => `<button type="button" class="tadd-b" data-badd="${k}"><span class="tdot" style="background:${c}"></span>${l}</button>`).join("")}</div>` : ""}
       <details class="tadv"><summary class="small muted">Mô tả · nguồn thay thế</summary>
@@ -147,8 +148,11 @@ export async function render(view, ctx) {
     if (v("#t-label") != null) draft.label = v("#t-label");
     if (v("#t-desc") != null) draft.description = v("#t-desc");
     if (v("#t-alt") != null) draft.alt_roles = parseAlt(v("#t-alt"));
-    const step = Number(v("#t-step-sec"));
-    if (Number.isFinite(step) && step > 0) draft.craft_step_sec = Math.min(15, Math.max(0.5, Math.round(step * 10) / 10));
+    el.querySelectorAll("[data-bf='step_sec']").forEach((inp) => {
+      const b = draft.sequence[Number(inp.closest("[data-bi]")?.dataset.bi)];
+      const n = Number(inp.value);
+      if (b && Number.isFinite(n)) b.step_sec = clampStep(n);
+    });
   };
   const redraw = () => { const sc = el.querySelector(".tpl-body")?.scrollTop || 0; grab(); paint(); const b = el.querySelector(".tpl-body"); if (b) b.scrollTop = sc; };
   const slug = (t) => (t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "tpl") + "_" + Math.random().toString(36).slice(2, 6);
@@ -162,7 +166,13 @@ export async function render(view, ctx) {
       const f = t.dataset.bf;
       if (f === "silent" || f === "loop") b[f] = t.checked;
       else if (f === "step") b.step = t.value || null;
-      else if (f === "role") { b.role = t.value; if (b.role !== "craft") b.step = null; if (b.role === "outro") { b.silent = false; b.loop = false; } }
+      else if (f === "step_sec") b.step_sec = clampStep(t.value);
+      else if (f === "role") {
+        b.role = t.value;
+        if (b.role !== "craft") { b.step = null; delete b.step_sec; }
+        else if (!b.step_sec) b.step_sec = 1;
+        if (b.role === "outro") { b.silent = false; b.loop = false; }
+      }
       redraw();
     }
   });
@@ -193,7 +203,7 @@ export async function render(view, ctx) {
       else if (b.hasAttribute("data-tseq") && draft) { grab(); draft.sequence = defaultSeq(draft.family); paint(); }
       else if (b.dataset.badd && draft) {
         grab();
-        const nb = { role: b.dataset.badd };
+        const nb = { role: b.dataset.badd, ...(b.dataset.badd === "craft" ? { step_sec: 1 } : {}) };
         const oi = draft.sequence.findIndex((x) => x.role === "outro");
         if (nb.role === "outro") { if (oi < 0) draft.sequence.push(nb); }
         else draft.sequence.splice(oi < 0 ? draft.sequence.length : oi, 0, nb);       // new blocks go before the outro
