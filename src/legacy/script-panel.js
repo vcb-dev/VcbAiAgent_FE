@@ -21,9 +21,8 @@ const stepHead = (n, label, extra = "") => `<div class="step-head"><span class="
 
 export function scriptForm(boot) {
   return `<div class="step-card">${stepHead(1, "Kịch bản", '<span id="content-fam"></span>')}
-      <div class="script-pick"><select id="content-select" aria-label="Kịch bản trong kho"><option value="">— Tự nhập kịch bản —</option></select>
+      <div class="script-pick"><select id="content-select" aria-label="Kịch bản trong kho"></select>
         <select id="lang-select" aria-label="Ngôn ngữ video">${Object.entries(LANG_NAMES).map(([k]) => `<option value="${k}">${k.toUpperCase()}</option>`).join("")}</select></div>
-      <input id="content-search" type="search" placeholder="Tìm kịch bản…" aria-label="Tìm kịch bản">
       <div id="content-meta" class="hint"></div>
       <textarea id="script-input" rows="5" placeholder="Chọn kịch bản trong kho hoặc dán lời…" aria-label="Lời kịch bản"></textarea>
       <div id="content-voice-dur" class="hint"></div>
@@ -54,24 +53,15 @@ export function scriptForm(boot) {
 }
 
 function contentOptions() {
-  const q = ($("content-search").value || "").trim().toLowerCase();
-  const list = st.items.filter((c) => c.status !== "archived" && (!q || `${c.title} ${c.script}`.toLowerCase().includes(q)));
+  const list = st.items.filter((c) => c.status !== "archived");
   const groups = Object.keys(FAM).map((f) => {
     const rows = list.filter((c) => c.family === f);
     return rows.length ? `<optgroup label="${FAM[f]} (${rows.length})">${rows.map((c) =>
       `<option value="${esc(c.id)}">${esc(c.title)}${Object.keys(c.voices || {}).length ? " 🎙" : ""}${c.status === "draft" ? " · nháp" : ""}</option>`).join("")}</optgroup>` : "";
   }).join("");
   const cur = $("content-select").value;
-  $("content-select").innerHTML = `<option value="">— Tự nhập kịch bản —</option>${groups}`;
+  $("content-select").innerHTML = groups;
   if (list.some((c) => c.id === cur)) $("content-select").value = cur;
-  syncScriptSearch();
-}
-function syncScriptSearch() {
-  const box = $("content-search");
-  if (!box) return;
-  const picked = !!$("content-select").value;
-  box.hidden = picked;
-  if (picked) box.value = "";
 }
 
 function voiceStale() {
@@ -238,7 +228,6 @@ function pickContent(id) {
   const c = st.items.find((x) => x.id === id) || null;
   st.content = c;
   st.voice = null;
-  syncScriptSearch();
   if (c) {
     $("script-input").value = c.script;
     applyLang();
@@ -277,7 +266,6 @@ async function aiWrite(btn) {
     const r = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(r.detail || res.statusText);
     st.items = [r, ...st.items.filter((x) => x.id !== r.id)];
-    $("content-search").value = "";
     contentOptions();
     $("content-select").value = r.id;
     pickContent(r.id);
@@ -402,22 +390,45 @@ function enableCraftSeq(draft, p, at, on) {
   draft.craft[at] = { at, sequential: true, origin, step: step?.step, name: step?.label };
 }
 
-function applySlotSeconds(draft, force) {
+function voiceBudget() {
+  const script = $("script-input")?.value.trim() || "";
+  if (st.voice && !voiceStale() && Number(st.voice.duration) > 0) return Number(st.voice.duration);
+  const saved = st.content?.voices?.[st.lang];
+  if (Number(saved?.duration) > 0 && (!saved.text || saved.text.trim() === script)) return Number(saved.duration);
+  return estimateVoiceSeconds(script);
+}
+
+function craftStepSec() {
+  const id = $("template-select")?.value;
+  const list = store.boot?.templates || [];
+  const t = list.find((x) => x.id === id) || list.find((x) => x.id === "A4");
+  const block = (t?.sequence || []).find((b) => b.role === "craft" && Number(b.step_sec) > 0);
+  return Number(block?.step_sec || t?.craft_step_sec) || 1;
+}
+
+function applySlotSeconds(draft) {
   if (!draft?.slots?.length) return draft;
   const slots = withSlotIndex(draft.slots);
-  const voice = Number(st.voice?.duration) || 0;
-  const share = slots.filter((s) => !lockedSec(s) && s.from !== "outro");
-  const n = share.length;
+  const voice = voiceBudget();
+  const flex = [];
+  slots.forEach((s, i) => { if (!lockedSec(s)) flex.push(i); });
   const lockedTotal = slots.reduce((sum, s) => sum + (lockedSec(s) || 0), 0);
-  const remain = voice > 0 ? Math.max(n * 1.5, voice - lockedTotal) : 0;
-  const each = n && remain ? Math.round((remain / n) * 10) / 10 : 0;
-  draft.slots = slots.map((s) => {
+  const remain = voice > 0 ? Math.max(0, Math.round((voice - lockedTotal) * 10) / 10) : 0;
+  const flexSec = new Map();
+  if (voice > 0 && flex.length) {
+    let left = remain;
+    flex.forEach((i, k) => {
+      const sec = remain <= 0 ? 0.5
+        : (k === flex.length - 1 ? Math.round(left * 10) / 10 : Math.round((left / (flex.length - k)) * 10) / 10);
+      left = Math.round((left - sec) * 10) / 10;
+      flexSec.set(i, sec);
+    });
+  }
+  draft.slots = slots.map((s, i) => {
     const fixed = lockedSec(s);
     if (fixed) return { ...s, seconds: fixed };
-    if (s.from === "outro") return { ...s, seconds: s.manualSec && !force ? s.seconds : (s.seconds || 4) };
-    if (s.manualSec && !force) return s;
-    const sec = each || s.seconds || (s.from === "huyk" ? 4 : s.from === "craft" ? 3 : 5);
-    return { ...s, seconds: sec };
+    if (flexSec.has(i)) return { ...s, seconds: flexSec.get(i) };
+    return { ...s, seconds: s.seconds || (s.from === "huyk" ? 4 : s.from === "craft" ? 3 : 4) };
   });
   return draft;
 }
@@ -437,7 +448,7 @@ function ensureA4() {
     return st.a4;
   }
   st.a4 = { sku: p.sku, slots: A4_SLOTS.map((s) => ({ ...s })), craft: formulaCraft(p.step_detail, false, A4_SLOTS), huyk: [] };
-  applySlotSeconds(st.a4, true);
+  applySlotSeconds(st.a4);
   return st.a4;
 }
 
@@ -466,7 +477,7 @@ function a4Payload() {
   const slots = withSlotIndex(draft.slots).filter((s) => st.lang === "vi" || s.from !== "outro");
   return {
     slots: slots.map((s) => ({ kind: s.from, variant: s.variant || null, seconds: s.seconds, at: s.at ?? null })),
-    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || null, sequential: !!c.sequential })),
+    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || null, sequential: !!c.sequential, ...(c.sequential ? { step_sec: craftStepSec() } : {}) })),
     huyk: [],
     craft_origin: null,
   };
@@ -681,7 +692,6 @@ async function makeVoice(btn) {
 export async function initScriptPanel() {
   $("content-select").addEventListener("change", (e) => pickContent(e.target.value));
   $("lang-select").addEventListener("change", (e) => { st.lang = e.target.value; st.voice = null; applyLang(); });
-  $("content-search").addEventListener("input", contentOptions);
   $("script-input").addEventListener("input", paintVoice);
   $("product-select").addEventListener("change", () => { st.a4 = null; showSteps(); });
   $("a4-route").addEventListener("change", onA4Change);
