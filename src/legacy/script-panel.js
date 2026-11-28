@@ -38,10 +38,11 @@ export function scriptForm(boot) {
         ${boot.products.map((p) => `<option value="${p.sku}">${esc(p.sku)} · ${esc((p.name || "").replace(/-/g, " "))}</option>`).join("")}</select>
       <div id="product-steps" class="hint ell"></div>
       <select id="line-select" class="hidden" aria-hidden="true"><option value="A4" selected>A4</option></select>
+      <label class="field">Template
+        <select id="template-select" aria-label="Template dựng"><option value="">— Chọn template —</option>
+          ${boot.templates.map((t) => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join("")}</select></label>
       <div id="a4-route"></div>
       <details class="hint"><summary>Tuỳ chọn dựng</summary>
-        <label class="field">Template <select id="template-select"><option value="auto">Tự động</option>
-          ${boot.templates.map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join("")}</select></label>
         <label class="field">Tách phân cảnh <select id="planner-select"><option value="rules" selected>Nhanh</option>
           <option value="claude" ${boot.claude_available ? "" : "disabled"}>AI${boot.claude_available ? "" : " (cần khoá)"}</option></select></label></details></div>
     <div class="step-card" id="illus-card">${stepHead(3, "Hình minh hoạ")}
@@ -303,12 +304,38 @@ const isHeroSlot = (s) => s.from === "product" && s.variant !== "final";
 const isFinalSlot = (s) => s.from === "product" && s.variant === "final";
 const lockedSec = (s) => (isHeroSlot(s) ? HERO_SEC : isFinalSlot(s) ? FINAL_SEC : 0);
 
+const BLOCK_SLOT = {
+  product_hero: { from: "product", variant: "hero" },
+  product_final: { from: "product", variant: "final" },
+  huyk_talk: { from: "huyk" },
+  huyk_silent: { from: "huyk" },
+  craft: { from: "craft" },
+  outro: { from: "outro" },
+  hook: { from: "hook" },
+  hook_visual: { from: "hook" },
+  content_illustration: { from: "illustration" },
+  stock: { from: "stock" },
+};
+
+function selectedTemplate() {
+  const id = $("template-select")?.value;
+  if (!id || id === "auto") return null;
+  return (store.boot?.templates || []).find((t) => t.id === id) || null;
+}
+
+function slotsFromTemplate(seq) {
+  return (seq || []).map((b) => {
+    const base = BLOCK_SLOT[b.role] || { from: "stock" };
+    return b.role === "craft" ? { ...base, step_sec: Number(b.step_sec) || 1 } : { ...base };
+  });
+}
+
 function withSlotIndex(slots) {
   const count = { craft: 0, huyk: 0 };
   return (slots || A4_SLOTS).map((s) => {
     if (s.from === "craft") {
       const at = count.craft++;
-      return { ...s, at, role: `Chế tác ${at + 1}`, seconds: s.seconds || 3 };
+      return { ...s, at, role: `Chế tác ${at + 1}`, seconds: s.seconds || 3, step_sec: Number(s.step_sec) || 1 };
     }
     if (s.from === "huyk") {
       const at = count.huyk++;
@@ -318,6 +345,9 @@ function withSlotIndex(slots) {
       const final = s.variant === "final";
       return { ...s, role: final ? "Sản phẩm hoàn thiện" : "Sản phẩm", seconds: final ? FINAL_SEC : HERO_SEC };
     }
+    if (s.from === "hook") return { ...s, role: "Hook", seconds: s.seconds || 3 };
+    if (s.from === "illustration") return { ...s, role: "Minh hoạ", seconds: s.seconds || 3 };
+    if (s.from === "stock") return { ...s, role: "Stock", seconds: s.seconds || 3 };
     return { ...s, role: "Outro", seconds: s.seconds || 4 };
   });
 }
@@ -387,7 +417,8 @@ function enableCraftSeq(draft, p, at, on) {
   const origin = pickCraftOrigin(p);
   const ordered = (origin && originLists(p)[origin]) || orderedCraftSteps(p?.step_detail);
   const step = ordered[0];
-  draft.craft[at] = { at, sequential: true, origin, step: step?.step, name: step?.label };
+  const stepSec = Number(draft.craft[at]?.step_sec) || 1;
+  draft.craft[at] = { at, sequential: true, origin, step: step?.step, name: step?.label, step_sec: stepSec };
 }
 
 function voiceBudget() {
@@ -437,17 +468,45 @@ function productOf() {
   return store.boot.products.find((x) => x.sku === $("product-select").value);
 }
 
+function seedCraft(slots, p, prev) {
+  const craft = [];
+  let at = 0;
+  for (const s of withSlotIndex(slots)) {
+    if (s.from !== "craft") continue;
+    const old = prev?.[at] || {};
+    const row = { at, sequential: old.sequential !== false, step_sec: Number(s.step_sec || old.step_sec) || 1 };
+    if (row.sequential && p) {
+      const origin = old.origin || pickCraftOrigin(p);
+      const ordered = (origin && originLists(p)[origin]) || orderedCraftSteps(p.step_detail);
+      const step = ordered.find((x) => x.step === old.step) || ordered[0];
+      if (step) Object.assign(row, { origin, step: step.step, name: step.label });
+    } else if (old.step) {
+      Object.assign(row, { step: old.step, name: old.name, sequential: false, origin: old.origin || null });
+    }
+    craft[at] = row;
+    at++;
+  }
+  return craft;
+}
+
+function templateKey(t) {
+  return `${t.id}|${(t.sequence || []).map((b) => `${b.role}:${b.step_sec || ""}`).join(",")}`;
+}
+
 function ensureA4() {
+  const tpl = selectedTemplate();
   const p = productOf();
-  if (!p) { st.a4 = null; return null; }
-  if (st.a4?.sku === p.sku) return st.a4;
-  const saved = store.job?.a4_line && store.job.sku === p.sku ? store.job.a4_plan : null;
-  if (saved?.slots?.length) {
-    st.a4 = { sku: p.sku, slots: saved.slots.map((s) => ({ ...s, from: s.from || s.kind })), craft: saved.craft || [], huyk: saved.huyk || [], craftOrigin: saved.craft_origin || saved.craftOrigin || null };
-    applySlotSeconds(st.a4);
+  if (!tpl?.sequence?.length) { st.a4 = null; return null; }
+  const key = templateKey(tpl);
+  if (st.a4?.templateKey === key) {
+    if ((st.a4.sku || "") !== (p?.sku || "")) {
+      st.a4.sku = p?.sku || "";
+      st.a4.craft = seedCraft(st.a4.slots, p, st.a4.craft);
+    }
     return st.a4;
   }
-  st.a4 = { sku: p.sku, slots: A4_SLOTS.map((s) => ({ ...s })), craft: formulaCraft(p.step_detail, false, A4_SLOTS), huyk: [] };
+  const slots = slotsFromTemplate(tpl.sequence);
+  st.a4 = { templateKey: key, templateId: tpl.id, sku: p?.sku || "", slots, craft: seedCraft(slots, p), huyk: [] };
   applySlotSeconds(st.a4);
   return st.a4;
 }
@@ -456,6 +515,8 @@ function a4Role(slot) {
   if (slot.from === "product") return slot.variant === "final" ? "product_final" : "product_hero";
   if (slot.from === "huyk") return "huyk_talk";
   if (slot.from === "craft") return "craft";
+  if (slot.from === "hook") return "hook";
+  if (slot.from === "illustration" || slot.from === "stock") return "content_illustration";
   return "outro";
 }
 
@@ -477,7 +538,7 @@ function a4Payload() {
   const slots = withSlotIndex(draft.slots).filter((s) => st.lang === "vi" || s.from !== "outro");
   return {
     slots: slots.map((s) => ({ kind: s.from, variant: s.variant || null, seconds: s.seconds, at: s.at ?? null })),
-    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || null, sequential: !!c.sequential, ...(c.sequential ? { step_sec: craftStepSec() } : {}) })),
+    craft: (draft.craft || []).filter(Boolean).map((c) => ({ step: c.step, name: c.name, at: c.at, origin: c.origin || null, sequential: !!c.sequential, ...(c.sequential ? { step_sec: Number(c.step_sec) || craftStepSec() } : {}) })),
     huyk: [],
     craft_origin: null,
   };
@@ -486,36 +547,42 @@ function a4Payload() {
 function paintA4() {
   const root = $("a4-route");
   if (!root) return;
+  const tpl = selectedTemplate();
   const p = productOf();
   const draft = ensureA4();
-  if (!p || !draft) {
-    root.innerHTML = `<div class="hint">Chọn sản phẩm để chỉnh các ô footage A4.</div>`;
+  if (!tpl) {
+    root.innerHTML = `<div class="hint">Chọn template để hiện các cảnh và thời lượng đúng các khối của template.</div>`;
+    return;
+  }
+  if (!draft) {
+    root.innerHTML = `<div class="hint">Template này chưa có trình tự cảnh.</div>`;
     return;
   }
   const slots = withSlotIndex(draft.slots);
-  const steps = p.step_detail || [];
-  const name = (p.name || p.sku).replace(/-/g, " ");
-  root.innerHTML = `${slots.map((s, i) => {
+  const steps = p?.step_detail || [];
+  const name = ((p?.name || p?.sku || "Sản phẩm")).replace(/-/g, " ");
+  root.innerHTML = `<div class="hint">Theo template <b>${esc(tpl.label)}</b> · ${slots.length} khối${p ? "" : " · chọn mã sản phẩm để gán công đoạn"}</div>${slots.map((s, i) => {
       if (s.from === "outro" && st.lang !== "vi") return "";
       const current = s.from === "craft" ? draft.craft?.[s.at] : s.from === "huyk" ? draft.huyk?.[s.at] : null;
-      const kinds = st.lang === "vi" ? A4_KINDS : A4_KINDS.filter((k) => k.key !== "outro");
-      const kindOpts = kinds.map((k) => `<option value="${k.key}" ${a4Key(s) === k.key ? "selected" : ""}>${esc(s.from === "craft" && k.key === "craft" ? s.role : k.role)}</option>`).join("");
       const fixed = lockedSec(s);
       const secBox = `<input class="a4-sec" type="number" min="1" max="90" step="0.5" data-a4="sec" data-i="${i}" value="${fixed || Number(s.seconds) || 1}" ${fixed ? "disabled" : ""} title="${fixed ? `Cố định ${fixed}s` : "Giây"}" aria-label="Giây ô ${i + 1}">`;
-      let src = `<b class="ell">${esc(s.from === "product" ? name : "Outro")}</b>`;
+      let src = `<b class="ell">${esc(s.from === "product" ? name : s.role)}</b>`;
       if (s.from === "product") src = `<b class="ell">${esc(name)}</b>`;
-      if (s.from === "craft") {
+      if (s.from === "craft" && !p) {
+        src = `<span class="muted">Chọn mã sản phẩm</span>`;
+      } else if (s.from === "craft") {
         const seqOn = !!current?.sequential;
         const extra = !seqOn && current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
-        src = `<span class="slot-src"><select class="a4-craft-pick" data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}">
+        src = `<select class="a4-craft-pick" data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}">
             <option value="seq" ${seqOn ? "selected" : ""}>Theo thứ tự công đoạn</option>
             ${seqOn ? "" : `${current?.step ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
             ${steps.map((st) => `<option value="${esc(st.step)}" ${current?.step === st.step ? "selected" : ""}>${esc(st.label)}</option>`).join("")}`}
-          </select>${seqOn ? "" : `<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn">↻</button>`}</span>`;
+          </select>${seqOn ? "" : `<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn">↻</button>`}`;
       } else if (s.from === "huyk") {
         src = `<span class="muted">Ngẫu nhiên</span>`;
       }
-      return `<div class="a4-slot"><div class="a4-slot-head"><select class="a4-kind" data-a4="kind" data-i="${i}">${kindOpts}</select>${secBox}${src}</div></div>`;
+      const stepNote = s.from === "craft" && current?.sequential ? `<span class="muted">· ${Number(current.step_sec) || Number(s.step_sec) || 1}s/công đoạn</span>` : "";
+      return `<div class="a4-slot"><div class="a4-slot-head"><span class="a4-kind">${esc(s.role)}</span>${secBox}<span class="slot-src">${src}${stepNote}</span></div></div>`;
     }).join("")}`;
 }
 
@@ -693,7 +760,8 @@ export async function initScriptPanel() {
   $("content-select").addEventListener("change", (e) => pickContent(e.target.value));
   $("lang-select").addEventListener("change", (e) => { st.lang = e.target.value; st.voice = null; applyLang(); });
   $("script-input").addEventListener("input", paintVoice);
-  $("product-select").addEventListener("change", () => { st.a4 = null; showSteps(); });
+  $("product-select").addEventListener("change", () => { showSteps(); });
+  $("template-select").addEventListener("change", () => { st.a4 = null; showSteps(); });
   $("a4-route").addEventListener("change", onA4Change);
   $("a4-route").addEventListener("click", onA4Click);
   fetch("/api/a4/huyk").then((r) => r.json()).then((d) => {
@@ -706,8 +774,9 @@ export async function initScriptPanel() {
     if (st.voice && !useVoice && !confirm("Kịch bản đã sửa sau khi tạo voice. Dựng không dùng voice này (tự lồng tiếng lại)?")) return;
     const line = $("line-select").value;
     const picked = $("template-select").value;
+    if (!picked) { toast("Chọn template trước khi dựng"); return; }
     actions.build({ script: $("script-input").value, sku: $("product-select").value,
-      template_id: picked !== "auto" ? picked : "A4",
+      template_id: picked,
       line, plan: line === "A4" ? a4Payload() : null, planner: $("planner-select").value, content_id: st.content?.id || null, voice_track: useVoice ? st.voice.audio : null, lang: st.lang,
       preview: true, web_search: $("ill-web").checked, ai_images: $("ill-ai").checked });                               // fast 360p draft while editing; HD from the Xuất menu
   });

@@ -70,9 +70,9 @@ function applyBoot(b) {
   const tpl = $("template-select");
   if (tpl && (store.boot.templates || []).length && tpl.options.length < 3) {
     const cur = tpl.value;
-    tpl.innerHTML = `<option value="auto">Tự động</option>${store.boot.templates.map((t) =>
+    tpl.innerHTML = `<option value="">— Chọn template —</option>${store.boot.templates.map((t) =>
       `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join("")}`;
-    tpl.value = cur || "auto";
+    if (cur && [...tpl.options].some((o) => o.value === cur)) tpl.value = cur;
   }
   emit();
 }

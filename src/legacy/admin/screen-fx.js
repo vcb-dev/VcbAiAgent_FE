@@ -42,25 +42,23 @@ function startEdit(info, id) {
 }
 
 const clampStep = (n) => Math.min(15, Math.max(0.5, Math.round(Number(n) * 10) / 10));
-function rowHtml(b, i, steps, craftN) {
+function rowHtml(b, i, craftN) {
   const c = (BLK[b.role] || BLK.outro)[1];
   const roleLabel = (k, l) => (k === "craft" ? `Chế tác ${craftN || ""}`.trim() : l);
   return `<div class="tblk" draggable="true" data-bi="${i}">
     <span class="tgrip" aria-hidden="true">⠿</span><span class="tdot" style="background:${c}"></span>
     <div class="tblk-main"><div class="tblk-top">
       <select class="tsel" data-bf="role" aria-label="Loại khối">${Object.entries(BLK).map(([k, [l]]) => `<option value="${k}" ${b.role === k ? "selected" : ""}>${roleLabel(k, l)}</option>`).join("")}</select>
-      ${b.role === "craft" ? `<select class="tsel" data-bf="step" aria-label="Công đoạn"><option value="">Công đoạn tự chọn</option>${steps.map((x) => `<option value="${x.key}" ${b.step === x.key ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select>` : ""}
       <span class="tsp"></span></div>
       ${b.role === "outro" ? "" : `<div class="tblk-flags"><label><input type="checkbox" data-bf="silent" ${b.silent ? "checked" : ""}> không lời</label>
         <label><input type="checkbox" data-bf="loop" ${b.loop ? "checked" : ""}> lặp đến hết</label></div>`}
-      ${b.role === "craft" ? `<label class="tstep">Mỗi công đoạn
-        <input type="number" data-bf="step_sec" min="0.5" max="15" step="0.5" value="${Number(b.step_sec) || 1}" aria-label="Giây mỗi công đoạn của Chế tác ${craftN}">
+      ${b.role === "craft" ? `<label class="tstep"><span class="tstep-lab">Số giây mỗi công đoạn</span>
+        <input type="number" data-bf="step_sec" min="0.5" max="15" step="0.5" value="${Number(b.step_sec) || 1}" aria-label="Số giây mỗi công đoạn của Chế tác ${craftN}">
         <span>giây</span></label>` : ""}</div>
     <button class="tx" type="button" data-bdel="${i}" aria-label="Bỏ khối">✕</button></div>`;
 }
 
 function tplView(info) {
-  const steps = info.steps || [];
   const cards = info.templates.map((x) => `<button type="button" class="tplcard${draft && draft.id === x.id ? " sel" : ""}" data-tsel="${esc(x.id)}">
       <span class="tc-h"><strong>${esc(x.label)}</strong><span class="mono small muted">${x.sequence?.length ? `${x.sequence.length} khối` : "tự động"}</span></span>
       ${bar(x.sequence)}
@@ -71,7 +69,7 @@ function tplView(info) {
       <div class="tmeta"><select id="t-fam" class="in" aria-label="Kiểu dựng">${Object.entries(info.families).map(([k, v]) => `<option value="${k}" ${d.family === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
         <span class="tlines">${(info.lines || ["A1", "A2", "A3", "A4", "A5"]).map((l) => `<button type="button" class="tline${d.lines.includes(l) ? " on" : ""}" data-tline="${l}">${l}</button>`).join("")}</span></div>
       ${d.sequence.length ? `${bar(d.sequence)}<div class="small muted">Thời lượng theo lời đọc · clip ngắn thì bốc clip khác trám · kéo ⠿ đổi thứ tự</div>
-        <div class="tblks" id="tblks">${(() => { let n = 0; return d.sequence.map((b, i) => rowHtml(b, i, steps, b.role === "craft" ? ++n : 0)).join(""); })()}</div>`
+        <div class="tblks" id="tblks">${(() => { let n = 0; return d.sequence.map((b, i) => rowHtml(b, i, b.role === "craft" ? ++n : 0)).join(""); })()}</div>`
       : `<div class="empty" style="padding:18px">Template này để AI tự xếp cảnh theo kịch bản.<br><br><button class="btn sm" type="button" data-tseq>Tự xếp trình tự cảnh</button></div>`}
       ${d.sequence.length ? `<div class="tadd"><span class="small muted">Thêm khối</span>${Object.entries(BLK).map(([k, [l, c]]) => `<button type="button" class="tadd-b" data-badd="${k}"><span class="tdot" style="background:${c}"></span>${l}</button>`).join("")}</div>` : ""}
       <details class="tadv"><summary class="small muted">Mô tả · nguồn thay thế</summary>
@@ -153,6 +151,7 @@ export async function render(view, ctx) {
       const n = Number(inp.value);
       if (b && Number.isFinite(n)) b.step_sec = clampStep(n);
     });
+    draft.sequence.forEach((b) => { if (b.role === "craft") b.step = null; });
   };
   const redraw = () => { const sc = el.querySelector(".tpl-body")?.scrollTop || 0; grab(); paint(); const b = el.querySelector(".tpl-body"); if (b) b.scrollTop = sc; };
   const slug = (t) => (t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 24) || "tpl") + "_" + Math.random().toString(36).slice(2, 6);
@@ -165,7 +164,6 @@ export async function render(view, ctx) {
       const b = draft.sequence[Number(row.dataset.bi)];
       const f = t.dataset.bf;
       if (f === "silent" || f === "loop") b[f] = t.checked;
-      else if (f === "step") b.step = t.value || null;
       else if (f === "step_sec") b.step_sec = clampStep(t.value);
       else if (f === "role") {
         b.role = t.value;
