@@ -575,8 +575,8 @@ function paintA4() {
         const extra = !seqOn && current?.step && !steps.some((st) => st.step === current.step) ? `<option value="${esc(current.step)}">${esc(current.name || current.step)}</option>` : "";
         src = `<select class="a4-craft-pick" data-a4="craft" data-i="${i}" aria-label="${esc(s.role)}">
             <option value="seq" ${seqOn ? "selected" : ""}>Theo thứ tự công đoạn</option>
-            ${seqOn ? "" : `${current?.step ? "" : `<option value="">— chọn công đoạn —</option>`}${extra}
-            ${steps.map((st) => `<option value="${esc(st.step)}" ${current?.step === st.step ? "selected" : ""}>${esc(st.label)}</option>`).join("")}`}
+            ${extra}
+            ${steps.map((st) => `<option value="${esc(st.step)}" ${!seqOn && current?.step === st.step ? "selected" : ""}>${esc(st.label)}</option>`).join("")}
           </select>${seqOn ? "" : `<button class="small-btn" type="button" data-a4="roll" data-i="${i}" title="Đổi công đoạn">↻</button>`}`;
       } else if (s.from === "huyk") {
         src = `<span class="muted">Ngẫu nhiên</span>`;
